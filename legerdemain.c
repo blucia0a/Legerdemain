@@ -8,6 +8,8 @@
 #define __USE_GNU //for RTLD_NEXT -- goofy GNU stuff
 #include <dlfcn.h>//for dlopen, dlsym, etc
 
+#include "addr2line.h"
+
 #include "Applier.h"
 
 #include "legerdemain.h"
@@ -16,7 +18,6 @@ struct sigaction sigABRTSaver;
 struct sigaction sigSEGVSaver;
 struct sigaction sigTERMSaver;
 struct sigaction sigINTSaver;
-    
 
 void __attribute__ ((constructor)) LDM_init();
 void __attribute__ ((destructor)) LDM_deinit();
@@ -27,19 +28,69 @@ void LDM_printVar(char *c, void *d){
     return;
   }
   ldmmsg(stderr,"%s ",c);
-  
+
+}
+
+void print_trace(){
+  void *array[10];
+  int size;
+  char **strings;
+  int i;
+
+  size = backtrace (array, 10);
+  strings = backtrace_symbols (array, size);
+     
+  for (i = 2; i < size; i++){
+
+    fprintf (stderr,"  %s  ", strings[i]);
+    if( strstr(strings[i],"/libc.") ){
+      fprintf(stderr,"\n");
+      continue;
+    }
+    int len = strlen(strings[i]);
+    char *temp = (char *)malloc(len);
+    strncpy(temp,strings[i],len);
+    char *c;
+    if( (c = strrchr(temp,'(')) ){
+      while( *c ){
+        *c=0; 
+        c++;
+      }
+      fprintf(stderr," %s",get_info(array[i],temp));
+    }else if( (c = strrchr(temp,' ')) ){
+      while( *c ){
+        *c=0;
+        c++;
+      } 
+      fprintf(stderr," %s",get_info(array[i],temp));
+    }
+    fprintf(stderr,"\n");
+    free( temp );
+  }
+     
+  free (strings);
 
 }
 
 void LDM_debug(){
 
+  print_trace();
+
   while(1){
-    /*TODO: apparently if read() is replaced, readline goes haywire*/
-    char *line = readline("[LDM]>");  
+
+    char *line = readline("LDM>");
+    
+    /*Decide what to do based on the command!*/
     if(line && strstr(line,"quit")){
       exit(0);
     }
-    fprintf(stderr,"Unsupported Command!\n");
+    
+    if(line && strstr(line,"cont")){
+      return;
+    }
+
+    fprintf(stderr,"Unsupported Command %s!\n", line);
+
   }
   exit(1);  
 
@@ -48,9 +99,12 @@ void LDM_debug(){
 
 void terminationHandler(int signum){
 
-  ldmmsg(stderr,"Process %d died with signal %d.  Entering LDM Debugger\n",getpid(),signum); 
+  ldmmsg(stderr,"Process %d got signal %d.  Entering LDM Debugger\n",getpid(),signum); 
 
-  /*The following code calls the program's signal handlers before entering the debugger*/
+  LDM_debug();
+
+  /*The following code calls the program's signal handlers after returning from the debugger*/
+  /*I don't know what the right behavior is for this case*/
   if( signum == SIGSEGV){
 
     if( sigSEGVSaver.sa_handler != SIG_DFL &&
@@ -78,8 +132,6 @@ void terminationHandler(int signum){
     }
   }
  
-  LDM_debug();
- 
   signal(signum, SIG_DFL);
   kill(getpid(), signum);
 
@@ -96,7 +148,7 @@ void setupSignals(){
   struct sigaction segv_sa;
   segv_sa.sa_handler = terminationHandler;
   sigemptyset(&segv_sa.sa_mask);
-  segv_sa.sa_flags = SA_RESTART;
+  segv_sa.sa_flags = SA_ONSTACK;
   sigaction(SIGSEGV,&segv_sa,&sigSEGVSaver);
   sigaction(SIGTERM,&segv_sa,&sigTERMSaver);
   sigaction(SIGABRT,&segv_sa,&sigABRTSaver);
