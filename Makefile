@@ -1,8 +1,8 @@
-all: applier scaley ldm a2l a2ltest
+all:  a2l a2ltest applier scaley ldm
 applier:
 	gcc Applier.c -o libapplier.so -fPIC -shared -g -O3 -ldl
 ldm:
-	gcc Applier.c legerdemain.c -o libldm.so -fPIC -shared -g -O3 -ldl -lreadline -L. -laddr2line
+	gcc legerdemain.c -o libldm.so -fPIC -shared -g -O3 -ldl -lreadline -L. -laddr2line -lapplier
 scaley:
 	gcc scaley_LDM.c -o scaley_LDM.so -L. -lapplier -fPIC -shared -g -O3 -ldl
 test:

@@ -1,16 +1,13 @@
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 
 int main(int argc, char **argv){
-
-    int c, nc = 0, nl = 0;
-
-    while ( (c = getchar()) != EOF )
-    {
-	nc++;
-	if (c == '\n') nl++;
-    }
-
-    printf("Number of characters = %d, number of lines = %d\n",
-	   nc, nl);
+  
+    int x = 0;
+    fprintf(stderr,"Addr of x is %p\n",&x);
+    x = ((int *)0x16)[0];
+    
+    printf("%d\n",x);
+    
 }

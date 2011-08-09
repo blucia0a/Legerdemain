@@ -1,5 +1,6 @@
 #define __USE_GNU
 #include <dlfcn.h>//for RTLD_NEXT
+#include <ucontext.h>
 
 #ifndef bool
 #define bool int

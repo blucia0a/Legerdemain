@@ -24,13 +24,25 @@ void __attribute__ ((destructor)) LDM_deinit();
 
 static bool LDM_runstate;
 
+void LDM_inspect(void *addr){
+
+  Dl_info d;
+  memset(&d,0,sizeof(d));
+  dladdr(addr, &d);
+  fprintf(stderr,"%lx = %lu [%s, defined in %s]",addr,(unsigned long)*((unsigned long *)addr),d.dli_sname, d.dli_fname);
+  return;
+
+}
+
 void LDM_showsource(char *fname, unsigned int line){
+
   int lines = 0;
   FILE *f = fopen(fname,"r");
   char buf[8192];
   while( fgets(buf, 8191, f) != NULL && ++lines < line);
   ldmmsg(stderr,"%s",buf);
   fclose(f);
+
 }
 
 void LDM_printlibs(char *c, void *d){
@@ -83,10 +95,11 @@ void print_trace(){
 
 }
 
+
+
 void LDM_debug(){
 
   print_trace();
-
   while(1){
 
     char *line = readline("LDM>");
@@ -123,6 +136,14 @@ void LDM_debug(){
       int lineno;
       sscanf(line,"%s %s %d\n",show,fname,&lineno);
       LDM_showsource(fname,lineno);
+      continue;
+    }
+
+    if(line && strstr(line,"inspect")){
+      unsigned long ad;
+      char insp[8];
+      sscanf(line,"%s %lx\n",insp,&ad);
+      LDM_inspect((void*)ad);
       continue;
     }
 
