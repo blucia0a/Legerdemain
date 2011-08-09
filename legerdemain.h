@@ -1,6 +1,12 @@
 #define __USE_GNU
 #include <dlfcn.h>//for RTLD_NEXT
 
+#ifndef bool
+#define bool int
+#define true 1
+#define false 0
+#endif
+
 
 /*Construct the name of the pointer to the original function*/
 #define LDM_ORIG(f) __LDM ## f

@@ -22,7 +22,18 @@ struct sigaction sigINTSaver;
 void __attribute__ ((constructor)) LDM_init();
 void __attribute__ ((destructor)) LDM_deinit();
 
-void LDM_printVar(char *c, void *d){
+static bool LDM_runstate;
+
+void LDM_showsource(char *fname, unsigned int line){
+  int lines = 0;
+  FILE *f = fopen(fname,"r");
+  char buf[8192];
+  while( fgets(buf, 8191, f) != NULL && ++lines < line);
+  ldmmsg(stderr,"%s",buf);
+  fclose(f);
+}
+
+void LDM_printlibs(char *c, void *d){
 
   if( strstr(c,"libldm.so") ){
     return;
@@ -38,7 +49,7 @@ void print_trace(){
   int i;
 
   size = backtrace (array, 10);
-  strings = backtrace_symbols (array, size);
+  strings = (char **)backtrace_symbols (array, size);
      
   for (i = 2; i < size; i++){
 
@@ -81,15 +92,41 @@ void LDM_debug(){
     char *line = readline("LDM>");
     
     /*Decide what to do based on the command!*/
+    if(line && !strncmp(line,"",1)){
+      continue;
+    }
+
     if(line && strstr(line,"quit")){
       exit(0);
     }
     
     if(line && strstr(line,"cont")){
-      return;
+      if( LDM_runstate == true ){
+        ldmmsg(stderr,"Continuing.\n");
+        return;
+      }else{
+        ldmmsg(stderr,"Can't continue - Not Running!\n");
+      }
+    }
+    
+    if(line && strstr(line,"run")){
+      if( LDM_runstate == false ){
+        return;
+      }else{
+        ldmmsg(stderr,"Can't run - Already running!\n");
+      }
     }
 
-    fprintf(stderr,"Unsupported Command %s!\n", line);
+    if(line && strstr(line,"show")){
+      char fname[2048];
+      char show[5];
+      int lineno;
+      sscanf(line,"%s %s %d\n",show,fname,&lineno);
+      LDM_showsource(fname,lineno);
+      continue;
+    }
+
+    ldmmsg(stderr,"Unsupported Command %s!\n", line);
 
   }
   exit(1);  
@@ -162,10 +199,12 @@ void LDM_init(){
   ldmmsg(stderr,"Loading function wrappers via LD_PRELOAD:\n");
 
   char *preloaded = getenv("LD_PRELOAD");
-  applyToTokens(preloaded,": ,",LDM_printVar,NULL);
+  applyToTokens(preloaded,": ,",LDM_printlibs,NULL);
   ldmmsg(stderr,"\n");
 
   setupSignals();
+
+  LDM_debug();
   
 }
 
