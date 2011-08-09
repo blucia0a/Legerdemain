@@ -1,13 +1,17 @@
 Legerdemain - Brandon Lucia - 2011
 
-A library for instrumenting programs and replacing/wrapping functions.  This
-project is a convenience wrapper for the LD_PRELOAD trick.  To use LDM plugins
+A debugger focused on instrumenting programs, replacing/wrapping functions, and
+monitoring/collecting information at runtime.  To use LDM plugins
 (like scaley_LDM.so), you need to LD_PRELOAD libldm.so and scaley_LDM.so by
 setting LD_PRELOAD=<path>/libldm.so:<path>/scaley_LDM.so in your environment.
 
-libldm.so does/will implement management and instrumentation
+scaley_LDM.so shows how to use LDM macros to instrument a function call (read,
+in this example) with your version.  It shows how to call the original as well.
 
-scaley_LDM.so shows how to use LDM's macros to replace a function call (read, in this example) with your version.  It shows how to call the original as well.
+libldm.so does/will implement management and instrumentation.  ldm.sh <your
+program> will run your program, load your plugins, and provide debugging
+support, should you receive any fatal signals.
+
 
 
 /********************************/
