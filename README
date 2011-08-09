@@ -9,6 +9,23 @@ libldm.so does/will implement management and instrumentation
 
 scaley_LDM.so shows how to use LDM's macros to replace a function call (read, in this example) with your version.  It shows how to call the original as well.
 
+
+/********************************/
+Notes:
+This project is changing!
+There is support being added for debugging.  Presently, on receiving SIGINT,
+ABRT, SEGV, or TERM control falls to the LDM debugger.  Using a version of
+addr2line, the binutils program, I've added support for providing file:line
+(function) information up the call stack.
+
+
+/********************************/
 TODO:
-*Add support for generic instrumentation (non function call based)
-*Add support for plugins to stream tasks to LDM data aggregation thread
+Add support for inspecting data, inspecting arbitrary code, and
+jumping around the call stack to look at params, locals, etc.
+
+Add support for user defined watchpoints, via drprobe (github.com/blucia0a/drprobe).
+
+Add support for generic instrumentation (non function call based)
+
+Add support for plugins to stream tasks to LDM data aggregation thread
