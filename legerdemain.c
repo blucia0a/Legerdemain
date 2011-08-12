@@ -14,6 +14,9 @@
 
 #include "legerdemain.h"
 
+#define MAX_THREADS 512
+pthread_t allThreads[MAX_THREADS];
+
 struct sigaction sigABRTSaver;
 struct sigaction sigSEGVSaver;
 struct sigaction sigTERMSaver;
@@ -23,6 +26,16 @@ void __attribute__ ((constructor)) LDM_init();
 void __attribute__ ((destructor)) LDM_deinit();
 
 static bool LDM_runstate;
+
+LDM_ORIG_DECL(int, pthread_create, pthread_t *, const pthread_attr_t *,
+              void *(*)(void*), void *);
+
+int pthread_create(pthread_t *thread,
+              const pthread_attr_t *attr,
+              void *(*start_routine)(void*), void *arg){
+  fprintf(stderr,"Magic create!\n");
+  return LDM_ORIG(pthread_create)(thread,attr,start_routine,arg);
+}
 
 void LDM_inspect(void *addr){
 
@@ -224,6 +237,7 @@ void LDM_init(){
   ldmmsg(stderr,"\n");
 
   setupSignals();
+  LDM_REG(pthread_create);
 
   LDM_debug();
   
