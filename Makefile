@@ -1,4 +1,5 @@
-all:  a2l a2ltest applier scaley ldm
+DWARFDIR=../libdwarf/libdwarf
+all:  a2l a2ltest applier scaley ldm dwarfTest
 applier:
 	gcc Applier.c -o libapplier.so -fPIC -shared -g -O3 -ldl
 ldm:
@@ -11,5 +12,8 @@ a2l:
 	gcc -g -shared -fPIC -lbfd addr2line.c -o libaddr2line.so
 a2ltest:
 	gcc -g ./testLibA2L.c -o testLibA2L -L. -laddr2line -liberty 
+
+dwarfTest:
+	gcc -g -lelf -L$(DWARFDIR) -ldwarf -I$(DWARFDIR) ./dwarfTest.c  -o dwarfTest
 clean:
 	rm *.so 
