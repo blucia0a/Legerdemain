@@ -12,6 +12,8 @@
 
 #include "Applier.h"
 
+#include "dwarfclient.h"
+
 #include "legerdemain.h"
 
 #define MAX_THREADS 512
@@ -29,11 +31,10 @@ static bool LDM_runstate;
 
 LDM_ORIG_DECL(int, pthread_create, pthread_t *, const pthread_attr_t *,
               void *(*)(void*), void *);
-
 int pthread_create(pthread_t *thread,
               const pthread_attr_t *attr,
               void *(*start_routine)(void*), void *arg){
-  fprintf(stderr,"Magic create!\n");
+
   return LDM_ORIG(pthread_create)(thread,attr,start_routine,arg);
 }
 
@@ -158,6 +159,15 @@ void LDM_debug(){
       sscanf(line,"%s %lx\n",insp,&ad);
       LDM_inspect((void*)ad);
       continue;
+    }
+
+    if(line && strstr(line,"dumpdwarf")){
+      char buf[1024];
+      memset(buf,0,1024);
+      fprintf(stderr,"Getting executable name %s\n");
+      readlink("/proc/self/exe",buf,1024);
+      fprintf(stderr,"The filename is %s\n",buf);
+      getdwarfdata(buf); 
     }
 
     ldmmsg(stderr,"Unsupported Command %s!\n", line);

@@ -1,9 +1,11 @@
 DWARFDIR=../libdwarf/libdwarf
-all:  a2l a2ltest applier scaley ldm dwarfTest
+all:  a2l a2ltest applier scaley stack libdwarfclient dwarfTest ldm 
+stack:
+	gcc stack.c -o libstack.so -fPIC -shared -g -O3
 applier:
 	gcc Applier.c -o libapplier.so -fPIC -shared -g -O3 -ldl
 ldm:
-	gcc legerdemain.c -o libldm.so -fPIC -shared -g -O3 -ldl -lreadline -L. -laddr2line -lapplier
+	gcc legerdemain.c -o libldm.so -fPIC -shared -g -O3 -ldl -lreadline -L. -laddr2line -lapplier -ldwarfclient
 scaley:
 	gcc scaley_LDM.c -o scaley_LDM.so -L. -lapplier -fPIC -shared -g -O3 -ldl
 test:
@@ -13,7 +15,11 @@ a2l:
 a2ltest:
 	gcc -g ./testLibA2L.c -o testLibA2L -L. -laddr2line -liberty 
 
-dwarfTest:
-	gcc -g -lelf -L$(DWARFDIR) -ldwarf -I$(DWARFDIR) ./dwarfTest.c  -o dwarfTest
+dwarfTest: dwarfclient.c
+	gcc -g -lelf -L$(DWARFDIR) -ldwarf -L. -lstack -I$(DWARFDIR) ./dwarfclient.c  -o dwarfTest
+
+libdwarfclient: dwarfclient.c
+	gcc -g -lelf -L$(DWARFDIR) -ldwarf -L. -lstack -DDWARF_CLIENT_LIB -fPIC -shared -I$(DWARFDIR) ./dwarfclient.c  -o libdwarfclient.so
+
 clean:
 	rm *.so 
