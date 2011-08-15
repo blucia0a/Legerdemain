@@ -15,8 +15,8 @@ a2l:
 a2ltest:
 	gcc -g ./testLibA2L.c -o testLibA2L -L. -laddr2line -liberty 
 
-dwarfTest: dwarfclient.c
-	gcc -g -lelf -L$(DWARFDIR) -ldwarf -L. -lstack -I$(DWARFDIR) ./dwarfclient.c  -o dwarfTest
+dwarfinfo: dwarfclient.c
+	gcc -g -lelf -L$(DWARFDIR) -ldwarf -L. -lstack -I$(DWARFDIR) ./dwarfclient.c  -o dwarfinfo
 
 libdwarfclient: dwarfclient.c
 	gcc -g -lelf -L$(DWARFDIR) -ldwarf -L. -lstack -DDWARF_CLIENT_LIB -fPIC -shared -I$(DWARFDIR) ./dwarfclient.c  -o libdwarfclient.so
