@@ -12,6 +12,16 @@ libldm.so does/will implement management and instrumentation.  ldm.sh <your
 program> will run your program, load your plugins, and provide debugging
 support, should you receive any fatal signals.
 
+libdwarfclient is used by libldm to access dwarf information in elf program
+binaries.  dwarfinfo is a standalone program that can be used to access
+dwarf debugging information from the the command line.  It is primarily 
+useful in 3 ways right now.
+1)using options -g -e<executable> -f<source file> -l<source line> it will show the 
+  instruction address of the specified file and line
+2)adding the -c option to the command line in 1), information about the compilation
+  unit in which the code point resides will be printed
+3)using the -p option dumps all the dwarf debug information in the binary
+
 
 
 /********************************/
