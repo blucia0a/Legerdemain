@@ -11,7 +11,7 @@
 void decode_location(Dwarf_Locdesc *locationList, Dwarf_Signed listLength, long *offset, long *init_val, int *frameRel){
 
   /*Location Decoding Code from http://ns.dyninst.org/coverage/dyninstAPI/src/parseDwarf.C.gcov.html*/
-  Stack *opStack = (Stack*)malloc(sizeof(opStack));
+  Stack *opStack = (Stack*)malloc(sizeof(Stack));
   Stack_Init(opStack);
   assert( listLength > 0 );
  
@@ -312,9 +312,9 @@ void show_all_attrs(Dwarf_Die die){
         }
         Dwarf_Half form;
         if(dwarf_whatform(atlist[i],&form,&error) == DW_DLV_OK){
-          const char *formname;
-          dwarf_get_FORM_name(form,&formname);
-          fprintf(stderr,"[%s] ",formname);
+          //const char *formname;
+          //dwarf_get_FORM_name(form,&formname);
+          //fprintf(stderr,"[%s] ",formname);
           switch(form){
             case DW_FORM_ref1:
             case DW_FORM_ref2:
@@ -369,7 +369,12 @@ void show_all_attrs(Dwarf_Die die){
                 int frameRel = 0;
                 long offset = 0;
                 decode_location(locationList,listLength,&offset,NULL,&frameRel);
-                
+                int i;
+                for( i = 0; i < listLength; ++i){
+                  dwarf_dealloc(d,locationList[i].ld_s,DW_DLA_LOC_BLOCK);               
+                }
+                dwarf_dealloc(d,locationList,DW_DLA_LOCDESC);               
+ 
                 fprintf(stderr," %s:",frameRel ? "FP Offset" : "Address");
                 fprintf(stderr," %ld\n",offset);
 
@@ -389,12 +394,6 @@ void show_all_attrs(Dwarf_Die die){
                 fprintf(stderr,"%s\n",str);
               } }
               break;
-              /*{Dwarf_Addr addr;
-              dwarf_formaddr(atlist[i],&addr,&error); 
-              fprintf(stderr,"%x\n",addr);
-              fprintf(stderr,"%s\n",*(char*)addr);}
-              break;*/
-              
             
             default:
               fprintf(stderr,"Unhandled Attribute Form!\n");
@@ -402,11 +401,9 @@ void show_all_attrs(Dwarf_Die die){
               
           };
         }
-      }
-      /*for(i = 0; i < atcnt; i++){
         dwarf_dealloc(d, atlist[i], DW_DLA_ATTR);
       }
-      dwarf_dealloc(d, atlist, DW_DLA_LIST);*/
+      dwarf_dealloc(d, atlist, DW_DLA_LIST);
     } 
 
 }
@@ -427,8 +424,7 @@ void visit_die(Dwarf_Die die, unsigned int level){
   Dwarf_Off off = 0x0;
   dwarf_die_CU_offset(die,&off,&error);
   fprintf(stderr,"[%u]<%x>%s\n",level,off,stag);
-  show_all_attrs(die);
-/*
+  
   char **sourceFiles;
   Dwarf_Signed num;
   int res;
@@ -441,7 +437,9 @@ void visit_die(Dwarf_Die die, unsigned int level){
     } 
     dwarf_dealloc(d, sourceFiles,DW_DLA_LIST);
   }
-*/
+  show_all_attrs(die);
+  
+
   Dwarf_Die kid;
   if( dwarf_child(die,&kid,&error) == DW_DLV_NO_ENTRY ){
     return;
