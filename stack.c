@@ -13,7 +13,7 @@ int Stack_Top(Stack *S)
     return S->data[S->size-1];
 }
 
-void Stack_Push(Stack *S, int d)
+void Stack_Push(Stack *S, long int d)
 {
     if (S->size < STACK_MAX)
         S->data[S->size++] = d;
