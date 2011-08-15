@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <assert.h>
 #include <string.h>
+#include <unistd.h>
 #include "stack.h"
 #include "dwarfclient.h"
 
@@ -485,8 +486,52 @@ int examine_cu(Dwarf_Die die){
 
 }
 
+
+unsigned long get_iaddr_of_file_line(const char *file, unsigned line){
+ 
+  Dwarf_Unsigned cu_h_len;
+  Dwarf_Half verstamp;
+  Dwarf_Unsigned abbrev_offset;
+  Dwarf_Half addrsize;
+  Dwarf_Unsigned next_cu;
+  Dwarf_Error error; 
+  int found = 0;
+  while( dwarf_next_cu_header(d,&cu_h_len,&verstamp,&abbrev_offset,&addrsize,&next_cu,&error) == DW_DLV_OK ){
+
+    Dwarf_Die cu_die = NULL;
+    int sibret;
+ 
+    int dieno = 0; 
+    while((sibret = 
+           dwarf_siblingof(d,cu_die,&cu_die,&error)) != DW_DLV_NO_ENTRY &&
+           sibret                                    != DW_DLV_ERROR){
+      Dwarf_Signed cnt;
+      Dwarf_Line *linebuf;
+      int sres;
+      if((sres = dwarf_srclines(cu_die, &linebuf, &cnt, &error)) == DW_DLV_OK){
+        int i;
+        for(i = 0; i < cnt; i++){
+          char *lf;
+          Dwarf_Unsigned ll;
+          dwarf_linesrc(linebuf[i], &lf, &error); 
+          dwarf_lineno(linebuf[i], &ll, &error);
+          if(line == ll && strstr(lf,file)){
+            Dwarf_Addr la;
+            dwarf_lineaddr(linebuf[i], &la, &error);
+            return la;
+          }
+          dwarf_dealloc(d, linebuf[i], DW_DLA_LINE);
+        }
+        dwarf_dealloc(d, linebuf, DW_DLA_LIST);
+      }
+    }
+  }
+  return 0xffffffffffffffff; 
+}
+
 Dwarf_Die get_cu_by_iaddr(unsigned long iaddr){
-  
+ 
+  fprintf(stderr,"Looking for %lx\n",iaddr); 
   Dwarf_Unsigned cu_h_len;
   Dwarf_Half verstamp;
   Dwarf_Unsigned abbrev_offset;
@@ -511,6 +556,7 @@ Dwarf_Die get_cu_by_iaddr(unsigned long iaddr){
       if( dwarf_attr(cu_die, DW_AT_high_pc, &highattr, &error) != DW_DLV_OK ){
         continue;
       }
+
       Dwarf_Addr loval,hival;
       dwarf_formaddr(lowattr,&loval,&error); 
       dwarf_formaddr(highattr,&hival,&error); 
@@ -525,8 +571,57 @@ Dwarf_Die get_cu_by_iaddr(unsigned long iaddr){
   
 }
 
+void dump_dwarf_info(){
+
+  Dwarf_Unsigned cu_h_len;
+  Dwarf_Half verstamp;
+  Dwarf_Unsigned abbrev_offset;
+  Dwarf_Half addrsize;
+  Dwarf_Unsigned next_cu;
+  Dwarf_Error error; 
+
+
+  int unit = 0;
+  fprintf(stderr,"--Examining Compilation Units--\n");
+  while( dwarf_next_cu_header(d,&cu_h_len,&verstamp,&abbrev_offset,&addrsize,&next_cu,&error) == DW_DLV_OK ){
+
+    Dwarf_Die cu_die = NULL;
+    int sibret;
+ 
+    int dieno = 0; 
+    while((sibret = 
+           dwarf_siblingof(d,cu_die,&cu_die,&error)) != DW_DLV_NO_ENTRY &&
+           sibret                                    != DW_DLV_ERROR){
+  
+      Dwarf_Half cu_tag; 
+      dwarf_tag(cu_die,&cu_tag,&error);
+
+ 
+      visit_die(cu_die,0);
+    
+    };
+    if(!sibret == DW_DLV_NO_ENTRY){
+      fprintf(stderr,"--Error Examining DIEs--\n");
+      exit(1);
+    }
+  }
+
+}
+
+void reset_cu_header_info(){
+  Dwarf_Unsigned cu_h_len;
+  Dwarf_Half verstamp;
+  Dwarf_Unsigned abbrev_offset;
+  Dwarf_Half addrsize;
+  Dwarf_Unsigned next_cu;
+  Dwarf_Error error; 
+  while( dwarf_next_cu_header(d,&cu_h_len,&verstamp,&abbrev_offset,&addrsize,&next_cu,&error) != DW_DLV_NO_ENTRY );
+}
+
+
+
 #ifdef DWARF_CLIENT_LIB
-int getdwarfdata(char *argv){
+int opendwarf(char *argv){
 #else
 int main(int argc, char **argv){
 #endif
@@ -536,52 +631,73 @@ int main(int argc, char **argv){
 #else
   char *fname = argv[1];
 #endif
+
+#ifndef DWARF_CLIENT_LIB
+
+  int getCU = 0;
+  int getAddrOfFileLine = 0;
+  const char *fileline_fn = NULL;
+  int fileline_ln = 0;
+  int dump = 0;
+  char opt;
+  const char *optString = "cgf:l:e:ph";
+  while( (opt = getopt(argc,argv,optString) ) != -1 ){
+    switch(opt){
+      case 'c':
+        getCU = 1;
+        break;
+      case 'g':
+        getAddrOfFileLine = 1;
+        break;
+      case 'f':
+        fileline_fn = strdup(optarg);
+        break;
+      case 'l':
+        fileline_ln = atoi(optarg);
+        break;
+      case 'e':
+        fname = strdup(optarg); 
+        break;
+      case 'p':
+        dump = 1;
+        break;
+      case 'h':
+        fprintf(stderr,"Usage: ./dwarfTest [-c -g -p -h][-f <file> -l<line> -e<executable>]\n"); 
+        fprintf(stderr,"\t-g: get instruction address of file and line (requires -f -l and -e)\n");
+        fprintf(stderr,"\t-c: get compilation unit info for file and line (requires -f -l and -e)\n");
+        fprintf(stderr,"\t-e: executable\n");
+        fprintf(stderr,"\t-f: source file\n");
+        fprintf(stderr,"\t-l: source line\n");
+        fprintf(stderr,"\t-p: dump dwarf information for executable\n");
+        fprintf(stderr,"\t-h: help\n");
+
+      default:
+        break;
+    };
+  }
+#endif
+
   fprintf(stderr,"Opening binary: %s\n",fname);
   int fd = open(fname,O_RDONLY);
   if(fd == -1){exit(-1);} 
   dwarf_init(fd,DW_DLC_READ,NULL,NULL,&d,&e) ;
 
-  Dwarf_Unsigned cu_h_len;
-  Dwarf_Half verstamp;
-  Dwarf_Unsigned abbrev_offset;
-  Dwarf_Half addrsize;
-  Dwarf_Unsigned next_cu;
-  Dwarf_Error error; 
-
-  ;
-
-  int unit = 0;
-  fprintf(stderr,"--Examining Compilation Units--\n");
-  while( dwarf_next_cu_header(d,&cu_h_len,&verstamp,&abbrev_offset,&addrsize,&next_cu,&error) == DW_DLV_OK ){
-
-    fprintf(stderr,"==Unit %d== Version: %u. Addrsize: %u.\n",unit++,verstamp,addrsize);
-    Dwarf_Die cu_die = NULL;
-    int sibret;
- 
-    int dieno = 0; 
-    fprintf(stderr,"--Examining Top-Level DIEs--\n");
-    while((sibret = 
-           dwarf_siblingof(d,cu_die,&cu_die,&error)) != DW_DLV_NO_ENTRY &&
-           sibret                                    != DW_DLV_ERROR){
-  
-      Dwarf_Half cu_tag; 
-      dwarf_tag(cu_die,&cu_tag,&error);
-  
-      const char *tag;
-      dwarf_get_TAG_name(cu_tag,&tag); 
-      fprintf(stderr,"=Die # %d=  Tag: %s\n",dieno,tag);
- 
-      visit_die(cu_die,0);
-    
-    };
-    if(sibret == DW_DLV_NO_ENTRY){
-      fprintf(stderr,"--Done Examining DIEs--\n");
-    }else{
-      fprintf(stderr,"--Error Examining DIEs--\n");
-      exit(1);
-    }
+#ifndef DWARF_CLIENT_LIB
+  unsigned long a;
+  if(getAddrOfFileLine){
+    a = get_iaddr_of_file_line(fileline_fn,fileline_ln);
+    fprintf(stderr,"%s:%u -> %x\n",fileline_fn, fileline_ln,a);
+  }
+  if(getCU){
+    reset_cu_header_info();
+    get_cu_by_iaddr(a);
+  }
+  if(dump){
+    reset_cu_header_info();
+    dump_dwarf_info();
   }
 
-  fprintf(stderr,"--Done Examining Compilation Units--\n");
+#endif
+
  
 }
