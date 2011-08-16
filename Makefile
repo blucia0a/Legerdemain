@@ -1,5 +1,5 @@
 DWARFDIR=../libdwarf/libdwarf
-all:  a2l a2ltest applier scaley stack libdwarfclient dwarfTest ldm 
+all:  a2l a2ltest applier scaley stack libdwarfclient dwarfinfo ldm 
 stack:
 	gcc stack.c -o libstack.so -fPIC -shared -g -O3
 applier:

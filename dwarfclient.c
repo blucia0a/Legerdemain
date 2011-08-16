@@ -294,129 +294,9 @@ void decode_location(Dwarf_Locdesc *locationList, Dwarf_Signed listLength, long 
 }  
 
 
-void show_all_attrs(Dwarf_Die die){
-    Dwarf_Error error;
-    Dwarf_Unsigned atcnt;
-    Dwarf_Attribute *atlist;
-    int errv;
-    if((errv = dwarf_attrlist(die, &atlist, &atcnt, &error)) == DW_DLV_OK){
-      int i;
-      for(i = 0; i < atcnt; i++){
-        Dwarf_Half attr;
-        if(dwarf_whatattr(atlist[i],&attr,&error) == DW_DLV_OK){
-          const char *sattr;
-          dwarf_get_AT_name(attr,&sattr); 
-          fprintf(stderr,"\t%s => ",sattr);
-        }else{
-          fprintf(stderr,"\tCouldn't Get Attr Type!\n"); 
-          continue;
-        }
-        Dwarf_Half form;
-        if(dwarf_whatform(atlist[i],&form,&error) == DW_DLV_OK){
-          //const char *formname;
-          //dwarf_get_FORM_name(form,&formname);
-          //fprintf(stderr,"[%s] ",formname);
-          switch(form){
-            case DW_FORM_ref1:
-            case DW_FORM_ref2:
-            case DW_FORM_ref4:
-            case DW_FORM_ref8:
-            case DW_FORM_ref_udata:
-              {Dwarf_Off offset;
-              dwarf_formref(atlist[i],&offset,&error); 
-              fprintf(stderr,"%x\n",offset);}
-              break;
-            case DW_FORM_ref_addr:
-              {Dwarf_Off offset;
-              dwarf_global_formref(atlist[i],&offset,&error); 
-              fprintf(stderr,"%x\n",offset);}
-              break;
-            case DW_FORM_addr:
-              {Dwarf_Addr addr;
-              dwarf_formaddr(atlist[i],&addr,&error); 
-              fprintf(stderr,"%x\n",addr);}
-              break;
-            case DW_FORM_flag:
-              {Dwarf_Bool flag;
-              dwarf_formflag(atlist[i],&flag,&error); 
-              fprintf(stderr,"%s\n",flag ? "True" : "False");}
-              break;
-            case DW_FORM_udata:
-            case DW_FORM_data1:
-            case DW_FORM_data2:
-            case DW_FORM_data4:
-            case DW_FORM_data8:
-              {Dwarf_Unsigned val;
-              dwarf_formudata(atlist[i],&val,&error); 
-              fprintf(stderr,"%u\n",val);}
-              break;
-            case DW_FORM_sdata:
-              {Dwarf_Signed val;
-              dwarf_formsdata(atlist[i],&val,&error); 
-              fprintf(stderr,"%d\n",val);}
-              break;
-            case DW_FORM_block:
-            case DW_FORM_block1:
-              if(attr == DW_AT_location ||
-                 attr == DW_AT_data_member_location ||
-                 attr == DW_AT_vtable_elem_location ||
-                 attr == DW_AT_string_length ||
-                 attr == DW_AT_use_location ||
-                 attr == DW_AT_return_addr){
-              
-                Dwarf_Locdesc *locationList;
-                Dwarf_Signed listLength;
-                int ret = dwarf_loclist( atlist[i], &locationList, &listLength, &error );
-                int frameRel = 0;
-                long offset = 0;
-                decode_location(locationList,listLength,&offset,NULL,&frameRel);
-                int i;
-                for( i = 0; i < listLength; ++i){
-                  dwarf_dealloc(d,locationList[i].ld_s,DW_DLA_LOC_BLOCK);               
-                }
-                dwarf_dealloc(d,locationList,DW_DLA_LOCDESC);               
- 
-                fprintf(stderr," %s:",frameRel ? "FP Offset" : "Address");
-                fprintf(stderr," %ld\n",offset);
-
-              }else{
-                fprintf(stderr,"UNSUPPORTED ATTRIBUTE TYPE\n");
-              }
-              break;
-            case DW_FORM_string:
-              {char *val;
-              dwarf_formstring(atlist[i],&val,&error); 
-              fprintf(stderr,"%s\n",val);}
-              break;
-            
-            case DW_FORM_strp:
-              {char *str;
-              if( (dwarf_formstring(atlist[i],&str,&error) == DW_DLV_OK) ){
-                fprintf(stderr,"%s\n",str);
-              } }
-              break;
-            
-            default:
-              fprintf(stderr,"Unhandled Attribute Form!\n");
-              break;
-              
-          };
-        }
-        dwarf_dealloc(d, atlist[i], DW_DLA_ATTR);
-      }
-      dwarf_dealloc(d, atlist, DW_DLA_LIST);
-    } 
-
-}
-
-void visit_die(Dwarf_Die die, unsigned int level){
-
-  /*This function visits the children of a die in sequence, 
-   *dumping their attributes*/
-  /*First: Dump this die's [level]tag and all attributes*/
+void show_all_attrs(Dwarf_Die die, unsigned long level, void *ndata){
   Dwarf_Error error;
   Dwarf_Half tag; 
- 
   dwarf_tag(die,&tag,&error);
 
   const char *stag;
@@ -438,52 +318,248 @@ void visit_die(Dwarf_Die die, unsigned int level){
     } 
     dwarf_dealloc(d, sourceFiles,DW_DLA_LIST);
   }
-  show_all_attrs(die);
-  
 
+  Dwarf_Unsigned atcnt;
+  Dwarf_Attribute *atlist;
+  int errv;
+  if((errv = dwarf_attrlist(die, &atlist, &atcnt, &error)) == DW_DLV_OK){
+    int i;
+    for(i = 0; i < atcnt; i++){
+      Dwarf_Half attr;
+      if(dwarf_whatattr(atlist[i],&attr,&error) == DW_DLV_OK){
+        const char *sattr;
+        dwarf_get_AT_name(attr,&sattr); 
+        fprintf(stderr,"\t%s => ",sattr);
+      }else{
+        fprintf(stderr,"\tCouldn't Get Attr Type!\n"); 
+        continue;
+      }
+      Dwarf_Half form;
+      if(dwarf_whatform(atlist[i],&form,&error) == DW_DLV_OK){
+        //const char *formname;
+        //dwarf_get_FORM_name(form,&formname);
+        //fprintf(stderr,"[%s] ",formname);
+        switch(form){
+          case DW_FORM_ref1:
+          case DW_FORM_ref2:
+          case DW_FORM_ref4:
+          case DW_FORM_ref8:
+          case DW_FORM_ref_udata:
+            {Dwarf_Off offset;
+            dwarf_formref(atlist[i],&offset,&error); 
+            fprintf(stderr,"%x\n",offset);}
+            break;
+          case DW_FORM_ref_addr:
+            {Dwarf_Off offset;
+            dwarf_global_formref(atlist[i],&offset,&error); 
+            fprintf(stderr,"%x\n",offset);}
+            break;
+          case DW_FORM_addr:
+            {Dwarf_Addr addr;
+            dwarf_formaddr(atlist[i],&addr,&error); 
+            fprintf(stderr,"%x\n",addr);}
+            break;
+          case DW_FORM_flag:
+            {Dwarf_Bool flag;
+            dwarf_formflag(atlist[i],&flag,&error); 
+            fprintf(stderr,"%s\n",flag ? "True" : "False");}
+            break;
+          case DW_FORM_udata:
+          case DW_FORM_data1:
+          case DW_FORM_data2:
+          case DW_FORM_data4:
+          case DW_FORM_data8:
+            {Dwarf_Unsigned val;
+            dwarf_formudata(atlist[i],&val,&error); 
+            fprintf(stderr,"%u\n",val);}
+            break;
+          case DW_FORM_sdata:
+            {Dwarf_Signed val;
+            dwarf_formsdata(atlist[i],&val,&error); 
+            fprintf(stderr,"%d\n",val);}
+            break;
+          case DW_FORM_block:
+          case DW_FORM_block1:
+            if(attr == DW_AT_location ||
+               attr == DW_AT_data_member_location ||
+               attr == DW_AT_vtable_elem_location ||
+               attr == DW_AT_string_length ||
+               attr == DW_AT_use_location ||
+               attr == DW_AT_return_addr){
+            
+              Dwarf_Locdesc *locationList;
+              Dwarf_Signed listLength;
+              int ret = dwarf_loclist( atlist[i], &locationList, &listLength, &error );
+              int frameRel = 0;
+              long offset = 0;
+              decode_location(locationList,listLength,&offset,NULL,&frameRel);
+              int i;
+              for( i = 0; i < listLength; ++i){
+                dwarf_dealloc(d,locationList[i].ld_s,DW_DLA_LOC_BLOCK);               
+              }
+              dwarf_dealloc(d,locationList,DW_DLA_LOCDESC);               
+
+              fprintf(stderr," %s:",frameRel ? "FP Offset" : "Address");
+              fprintf(stderr," %ld\n",offset);
+
+            }else{
+              fprintf(stderr,"UNSUPPORTED ATTRIBUTE TYPE\n");
+            }
+            break;
+          case DW_FORM_string:
+            {char *val;
+            dwarf_formstring(atlist[i],&val,&error); 
+            fprintf(stderr,"%s\n",val);}
+            break;
+          
+          case DW_FORM_strp:
+            {char *str;
+            if( (dwarf_formstring(atlist[i],&str,&error) == DW_DLV_OK) ){
+              fprintf(stderr,"%s\n",str);
+            } }
+            break;
+          
+          default:
+            fprintf(stderr,"Unhandled Attribute Form!\n");
+            break;
+            
+        };
+      }
+      dwarf_dealloc(d, atlist[i], DW_DLA_ATTR);
+    }
+    dwarf_dealloc(d, atlist, DW_DLA_LIST);
+  } 
+
+}
+
+void show_info_for_containing_pc_ranges(Dwarf_Die die, int enclosing, unsigned long iaddr){
+
+  /*This function visits the children of a die in sequence, 
+   *applying the action() function to each*/
+  Dwarf_Attribute highattr;
+  Dwarf_Attribute lowattr;
+  Dwarf_Addr loval,hival;
+  Dwarf_Bool has;
+  Dwarf_Error error;
+  Dwarf_Half tag; 
+  
+  loval = hival = 0x0;
+  int enc = 0;
+
+  dwarf_tag(die,&tag,&error);
+ 
+  if( tag == DW_TAG_variable ||
+      tag == DW_TAG_formal_parameter ){
+
+    if(enclosing){
+      char *name;
+      dwarf_diename(die,&name,&error);
+      fprintf(stderr,"%s, ",name);
+      //show_all_attrs(die,0,NULL);
+    }
+     
+  }
+
+  if( tag == DW_TAG_lexical_block || tag == DW_TAG_subprogram ){
+    if( dwarf_lowpc(die,&loval,&error) == DW_DLV_OK  && dwarf_highpc(die,&hival,&error) == DW_DLV_OK
+        && iaddr >=loval && iaddr <= hival ){ 
+      enc = 1;
+      fprintf(stderr,"\n=================================\n");
+      show_all_attrs(die,0,NULL);
+      fprintf(stderr,"=================================\n");
+    }
+  
+  }
+  
   Dwarf_Die kid;
   if( dwarf_child(die,&kid,&error) == DW_DLV_NO_ENTRY ){
     return;
   }
-  visit_die(kid,level+1); 
+  show_info_for_containing_pc_ranges(kid, enc, iaddr); 
+  //visit_die(kid,level+1,action,adata); 
 
   int chret;
-
-
   while( (chret = dwarf_siblingof(d,kid,&kid,&error)) != DW_DLV_NO_ENTRY &&
            chret != DW_DLV_ERROR){
 
-    visit_die(kid,level+1);
+    show_info_for_containing_pc_ranges(kid, enc, iaddr); 
+    //visit_die(kid,level+1,action,adata);
+
+  }
+
+  return;
+}
+
+Dwarf_Die get_cu_by_iaddr(unsigned long iaddr){
+ 
+  Dwarf_Unsigned cu_h_len;
+  Dwarf_Half verstamp;
+  Dwarf_Unsigned abbrev_offset;
+  Dwarf_Half addrsize;
+  Dwarf_Unsigned next_cu;
+  Dwarf_Error error; 
+  while( dwarf_next_cu_header(d,
+                              &cu_h_len,
+                              &verstamp,
+                              &abbrev_offset,
+                              &addrsize,
+                              &next_cu,
+                              &error) == DW_DLV_OK ){
+
+    Dwarf_Die cu_die = NULL;
+    int sibret;
+ 
+    int dieno = 0; 
+    while((sibret = 
+           dwarf_siblingof(d,cu_die,&cu_die,&error)) != DW_DLV_NO_ENTRY &&
+           sibret                                    != DW_DLV_ERROR){
+
+      Dwarf_Attribute lowattr;
+      if( dwarf_attr(cu_die, DW_AT_low_pc, &lowattr, &error) != DW_DLV_OK ){
+        continue;
+      }
+      Dwarf_Attribute highattr;
+      if( dwarf_attr(cu_die, DW_AT_high_pc, &highattr, &error) != DW_DLV_OK ){
+        continue;
+      }
+
+      Dwarf_Addr loval,hival;
+      dwarf_formaddr(lowattr,&loval,&error); 
+      dwarf_formaddr(highattr,&hival,&error); 
+      if(iaddr >= loval && iaddr <= hival){
+        return cu_die;
+      }
+
+    }
+
+  }
+  
+}
+ 
+
+void visit_die(Dwarf_Die die, unsigned long level, void (*action)(Dwarf_Die,unsigned long, void *d),void *adata){
+
+  /*This function visits the children of a die in sequence, 
+   *applying the action() function to each*/
+  action(die,level,adata);
+ 
+  Dwarf_Error error; 
+  Dwarf_Die kid;
+  if( dwarf_child(die,&kid,&error) == DW_DLV_NO_ENTRY ){
+    return;
+  }
+  visit_die(kid,level+1,action,adata); 
+
+  int chret;
+  while( (chret = dwarf_siblingof(d,kid,&kid,&error)) != DW_DLV_NO_ENTRY &&
+           chret != DW_DLV_ERROR){
+
+    visit_die(kid,level+1,action,adata);
 
   }
 
   return;
   
-}
-
-int examine_cu(Dwarf_Die die){
-
-  Dwarf_Error error;
-  Dwarf_Die kid;
-  if( dwarf_child(die,&kid,&error) == DW_DLV_NO_ENTRY ){
-    return 0;
-  }
-
-  int chret;
-  while( (chret = dwarf_siblingof(d,kid,&kid,&error)) != DW_DLV_NO_ENTRY &&
-         chret != DW_DLV_ERROR){
-
-    Dwarf_Half tag; 
-    dwarf_tag(kid,&tag,&error);
-
-    const char *stag;
-    dwarf_get_TAG_name(tag,&stag); 
-    fprintf(stderr,"Tag: %s\n",stag);
-    show_all_attrs(kid); 
-
-  }
-  return 1;
-
 }
 
 
@@ -505,6 +581,7 @@ unsigned long get_iaddr_of_file_line(const char *file, unsigned line){
     while((sibret = 
            dwarf_siblingof(d,cu_die,&cu_die,&error)) != DW_DLV_NO_ENTRY &&
            sibret                                    != DW_DLV_ERROR){
+
       Dwarf_Signed cnt;
       Dwarf_Line *linebuf;
       int sres;
@@ -529,46 +606,12 @@ unsigned long get_iaddr_of_file_line(const char *file, unsigned line){
   return 0xffffffffffffffff; 
 }
 
-Dwarf_Die get_cu_by_iaddr(unsigned long iaddr){
- 
-  fprintf(stderr,"Looking for %lx\n",iaddr); 
-  Dwarf_Unsigned cu_h_len;
-  Dwarf_Half verstamp;
-  Dwarf_Unsigned abbrev_offset;
-  Dwarf_Half addrsize;
-  Dwarf_Unsigned next_cu;
-  Dwarf_Error error; 
-  while( dwarf_next_cu_header(d,&cu_h_len,&verstamp,&abbrev_offset,&addrsize,&next_cu,&error) == DW_DLV_OK ){
 
-    Dwarf_Die cu_die = NULL;
-    int sibret;
- 
-    int dieno = 0; 
-    while((sibret = 
-           dwarf_siblingof(d,cu_die,&cu_die,&error)) != DW_DLV_NO_ENTRY &&
-           sibret                                    != DW_DLV_ERROR){
 
-      Dwarf_Attribute lowattr;
-      if( dwarf_attr(cu_die, DW_AT_low_pc, &lowattr, &error) != DW_DLV_OK ){
-        continue;
-      }
-      Dwarf_Attribute highattr;
-      if( dwarf_attr(cu_die, DW_AT_high_pc, &highattr, &error) != DW_DLV_OK ){
-        continue;
-      }
 
-      Dwarf_Addr loval,hival;
-      dwarf_formaddr(lowattr,&loval,&error); 
-      dwarf_formaddr(highattr,&hival,&error); 
-      if(iaddr >= loval && iaddr <= hival){
-        show_all_attrs(cu_die);
-        return;
-      }
-
-    }
-
-  }
-  
+Dwarf_Die get_block_by_iaddr(unsigned long iaddr){
+  Dwarf_Die cu = get_cu_by_iaddr(iaddr); 
+   
 }
 
 void dump_dwarf_info(){
@@ -597,7 +640,7 @@ void dump_dwarf_info(){
       dwarf_tag(cu_die,&cu_tag,&error);
 
  
-      visit_die(cu_die,0);
+      visit_die(cu_die,0,show_all_attrs,NULL);
     
     };
     if(!sibret == DW_DLV_NO_ENTRY){
@@ -662,14 +705,14 @@ int main(int argc, char **argv){
         dump = 1;
         break;
       case 'h':
-        fprintf(stderr,"Usage: ./dwarfTest [-c -g -p -h][-f <file> -l<line> -e<executable>]\n"); 
-        fprintf(stderr,"\t-g: get instruction address of file and line (requires -f -l and -e)\n");
-        fprintf(stderr,"\t-c: get compilation unit info for file and line (requires -f -l and -e)\n");
-        fprintf(stderr,"\t-e: executable\n");
-        fprintf(stderr,"\t-f: source file\n");
-        fprintf(stderr,"\t-l: source line\n");
-        fprintf(stderr,"\t-p: dump dwarf information for executable\n");
-        fprintf(stderr,"\t-h: help\n");
+        fprintf(stderr,"Usage: ./dwarfinfo -e <executable> [Option(s)]\n"); 
+        fprintf(stderr,"\t-e Specify executable\n");
+        fprintf(stderr,"\t-g Get instruction address of file and line (requires -f and -l)\n");
+        fprintf(stderr,"\t-c Show enclosing scopes and variables in each for file and line (requires -f and -l)\n");
+        fprintf(stderr,"\t-p Dump dwarf information for executable\n");
+        fprintf(stderr,"\t-f Specify source file\n");
+        fprintf(stderr,"\t-l Specify source line\n");
+        fprintf(stderr,"\t-h Help\n");
 
       default:
         break;
@@ -677,7 +720,6 @@ int main(int argc, char **argv){
   }
 #endif
 
-  fprintf(stderr,"Opening binary: %s\n",fname);
   int fd = open(fname,O_RDONLY);
   if(fd == -1){exit(-1);} 
   dwarf_init(fd,DW_DLC_READ,NULL,NULL,&d,&e) ;
@@ -686,12 +728,17 @@ int main(int argc, char **argv){
   unsigned long a;
   if(getAddrOfFileLine){
     a = get_iaddr_of_file_line(fileline_fn,fileline_ln);
-    fprintf(stderr,"%s:%u -> %x\n",fileline_fn, fileline_ln,a);
+    fprintf(stderr,"%x\n",a);
   }
-  if(getCU){
+
+  if(getCU && a != 0xffffffffffffffff){
     reset_cu_header_info();
-    get_cu_by_iaddr(a);
+    Dwarf_Die cu = get_cu_by_iaddr(a);
+    reset_cu_header_info();
+    show_info_for_containing_pc_ranges(cu,0,a);
+    fprintf(stderr,"\n");
   }
+
   if(dump){
     reset_cu_header_info();
     dump_dwarf_info();

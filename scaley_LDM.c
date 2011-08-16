@@ -3,10 +3,11 @@
 
 #include "legerdemain.h"
 
-LDM_ORIG_DECL(ssize_t,read,int,void*,size_t);
-ssize_t read(int fildes, void *buf, size_t nbyte){
-  fprintf(stderr,"Magic Read!\n");
-  return LDM_ORIG(read)(fildes,buf,nbyte);  
+
+LDM_ORIG_DECL(int,getchar,void);
+int getchar(void){
+  fprintf(stderr,"Magic getchar!\n");
+  return LDM_ORIG(getchar)();
 }
 
 void __attribute__ ((constructor))init();
@@ -14,7 +15,7 @@ void __attribute__ ((destructor)) deinit();
 void init(){
 
   fprintf(stderr,"Calling Scaley_LDM intializer\n");
-  LDM_REG(read);
+  LDM_REG(getchar);
   
 }
 
