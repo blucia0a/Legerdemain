@@ -533,6 +533,7 @@ Dwarf_Die get_cu_by_iaddr(unsigned long iaddr){
     }
 
   }
+  return (Dwarf_Die)-1;
   
 }
  
@@ -661,7 +662,31 @@ void reset_cu_header_info(){
   while( dwarf_next_cu_header(d,&cu_h_len,&verstamp,&abbrev_offset,&addrsize,&next_cu,&error) != DW_DLV_NO_ENTRY );
 }
 
+void show_scopes_by_file_line(char *fileline_fn, int fileline_ln){
+  unsigned long a = get_iaddr_of_file_line(fileline_fn,fileline_ln);
+  reset_cu_header_info();
+  Dwarf_Die cu = get_cu_by_iaddr(a);
+  reset_cu_header_info();
+  if(a != 0xffffffffffffffff && (long int)cu != -1){
+    show_info_for_containing_pc_ranges(cu,0,a);
+  }else{
+    fprintf(stderr,"I can't find address %x\n",a);
+  }
+  fprintf(stderr,"\n");
+}
 
+void show_scopes_by_addr(void *addr){
+  unsigned long a = (unsigned long)addr;
+  reset_cu_header_info();
+  Dwarf_Die cu = get_cu_by_iaddr(a);
+  reset_cu_header_info();
+  if(a != 0xffffffffffffffff && (long int)cu != -1){
+    show_info_for_containing_pc_ranges(cu,0,a);
+  }else{
+    fprintf(stderr,"I can't find address %x\n",a);
+  }
+  fprintf(stderr,"\n");
+}
 
 #ifdef DWARF_CLIENT_LIB
 int opendwarf(char *argv){

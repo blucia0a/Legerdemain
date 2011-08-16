@@ -27,6 +27,8 @@ struct sigaction sigINTSaver;
 void __attribute__ ((constructor)) LDM_init();
 void __attribute__ ((destructor)) LDM_deinit();
 
+char *LDM_ProgramName;
+
 static bool LDM_runstate;
 
 LDM_ORIG_DECL(int, pthread_create, pthread_t *, const pthread_attr_t *,
@@ -36,6 +38,19 @@ int pthread_create(pthread_t *thread,
               void *(*start_routine)(void*), void *arg){
 
   return LDM_ORIG(pthread_create)(thread,attr,start_routine,arg);
+}
+
+void LDM_line_to_addr(char *file, int line){
+  void * a = (void*)get_iaddr_of_file_line(file,line);
+  fprintf(stderr,"%p\n",a);
+}
+
+void LDM_scope_f(char *file, int line){
+  show_scopes_by_file_line(file,line);  
+}
+
+void LDM_scope_a(void *addr){
+  show_scopes_by_addr(addr);  
 }
 
 void LDM_inspect(void *addr){
@@ -79,7 +94,8 @@ void print_trace(){
      
   for (i = 2; i < size; i++){
 
-    fprintf (stderr,"  %s  ", strings[i]);
+    fprintf (stderr,"  %s\n", strings[i]);
+   /*
     if( strstr(strings[i],"/libc.") ){
       fprintf(stderr,"\n");
       continue;
@@ -103,13 +119,19 @@ void print_trace(){
     }
     fprintf(stderr,"\n");
     free( temp );
+   */
   }
      
   free (strings);
 
 }
 
-
+char *getProgramName(){
+  char *buf = (char*)malloc(1024);
+  memset(buf,0,1024);
+  readlink("/proc/self/exe",buf,1024);
+  return buf;
+}
 
 void LDM_debug(){
 
@@ -162,12 +184,40 @@ void LDM_debug(){
     }
 
     if(line && strstr(line,"dumpdwarf")){
-      char buf[1024];
-      memset(buf,0,1024);
-      fprintf(stderr,"Getting executable name %s\n");
-      readlink("/proc/self/exe",buf,1024);
-      fprintf(stderr,"The filename is %s\n",buf);
-      getdwarfdata(buf); 
+      dump_dwarf_info(); 
+      continue;
+    }
+    
+    if(line && strstr(line,"ascope")){
+
+        char sc_str[6];
+        void *ad;
+        sscanf(line,"%s 0x%p\n",sc_str,&ad);
+        fprintf(stderr,"str is %s, address is %p\n",sc_str, ad);
+        LDM_scope_a(ad); 
+        continue;
+    }
+    if(line && strstr(line,"fscope")){
+        char sc_str[6];
+        char fn[1024];
+        unsigned ln;
+        sscanf(line,"%s %s %u\n",sc_str,fn,&ln);
+        fprintf(stderr,"%s %s %u\n",sc_str,fn,ln); 
+        LDM_scope_f(fn,ln); 
+        continue;
+    }
+    if(line && strstr(line,"linetoaddr")){
+        char sc_str[6];
+        char fn[1024];
+        unsigned ln;
+        sscanf(line,"%s %s %u\n",sc_str,fn,&ln);
+        fprintf(stderr,"%s %s %u\n",sc_str,fn,ln); 
+        LDM_line_to_addr(fn,ln); 
+        continue;
+    }
+    if(line && strstr(line,"bt") || strstr(line,"backtrace") || strstr(line,"where")){
+      print_trace();
+      continue;
     }
 
     ldmmsg(stderr,"Unsupported Command %s!\n", line);
@@ -248,6 +298,9 @@ void LDM_init(){
 
   setupSignals();
   LDM_REG(pthread_create);
+
+  LDM_ProgramName = getProgramName();
+  opendwarf(LDM_ProgramName);
 
   LDM_debug();
   
