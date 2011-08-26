@@ -1,7 +1,13 @@
+/*To ensure RTLD_NEXT is defined*/
 #define __USE_GNU
+
+/*For dynamic loading support*/
 #include <dlfcn.h>//for RTLD_NEXT
+
+/*For ucontext_t*/
 #include <ucontext.h>
 
+/*Define booleans...*/
 #ifndef bool
 #define bool int
 #define true 1

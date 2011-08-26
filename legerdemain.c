@@ -1,36 +1,64 @@
-#include <sys/types.h>//for size_t
-#include <stdlib.h>//for getenv 
-#include <stdio.h>//for fprintf
-#include <unistd.h>//for read
-#include <signal.h>//for SIG_*, sigaction, etc
+/*Included System Headers*/
+/*for size_t*/
+#include <sys/types.h>
+
+/*for getenv*/
+#include <stdlib.h>
+
+/*for fprintf*/
+#include <stdio.h>
+
+/*for readlink*/
+#include <unistd.h>
+
+/*for SIG_ constants, sigaction, etc*/
+#include <signal.h>
+
+/*for readline() support*/
 #include <readline/readline.h>
 
-#define __USE_GNU //for RTLD_NEXT -- goofy GNU stuff
-#include <dlfcn.h>//for dlopen, dlsym, etc
+/*Defined to ensure RTLD_NEXT is defined in dlfcn.h*/
+#define __USE_GNU 
 
+/*for dlopen, dlsym, etc*/
+#include <dlfcn.h>
+
+/*for get_info()*/
 #include "addr2line.h"
 
+/*for applyToTokens*/
 #include "Applier.h"
 
+/*for dwarf manipulation support*/
 #include "dwarfclient.h"
 
+/*for various project-specific macros and typedefs*/
 #include "legerdemain.h"
 
-#define MAX_THREADS 512
-pthread_t allThreads[MAX_THREADS];
-
+/*
+ * These will be used to preserve the program's 
+ * original signal handlers when LDM replaces them
+ */
 struct sigaction sigABRTSaver;
 struct sigaction sigSEGVSaver;
 struct sigaction sigTERMSaver;
 struct sigaction sigINTSaver;
 
+/*LDM's constructor and destructor*/
 void __attribute__ ((constructor)) LDM_init();
 void __attribute__ ((destructor)) LDM_deinit();
 
-char *LDM_ProgramName;
+/*The executable name*/
+static char *LDM_ProgramName;
 
+/*Records whether the program is running or not*/
 static bool LDM_runstate;
 
+/* 
+ * Replacement version of pthread_create --
+ * LDM has its own version that tracks additional
+ * information about each threads' activities
+ */
 LDM_ORIG_DECL(int, pthread_create, pthread_t *, const pthread_attr_t *,
               void *(*)(void*), void *);
 int pthread_create(pthread_t *thread,
@@ -40,29 +68,53 @@ int pthread_create(pthread_t *thread,
   return LDM_ORIG(pthread_create)(thread,attr,start_routine,arg);
 }
 
+/*
+ * The following functions wrap the dwarf information
+ * access support provided by libdwarfclient.  See
+ * libdwarfclient for more information about what
+ * each of these does.
+ */
+
+/*
+ * Print the instruction pointer of the first instruction
+ * on line 'line' of the file 'file'
+ */
 void LDM_line_to_addr(char *file, int line){
   void * a = (void*)get_iaddr_of_file_line(file,line);
   fprintf(stderr,"%p\n",a);
 }
 
+/*
+ * Print the sequence of scopes and the variables
+ * in each for the provided file and line.  The scopes
+ * will be descended into, starting at the top-most
+ * scope of the compilation unit that the file and line 
+ * is part of
+ */
 void LDM_scope_f(char *file, int line){
   show_scopes_by_file_line(file,line);  
 }
 
+/*
+ * Same functionality as LDM_scope_f(), except searches based
+ * on an instruction address, instead of a file:line pair
+ */
 void LDM_scope_a(void *addr){
   show_scopes_by_addr(addr);  
 }
 
-void LDM_inspect(void *addr){
-
-  Dl_info d;
-  memset(&d,0,sizeof(d));
-  dladdr(addr, &d);
-  fprintf(stderr,"%lx = %lu [%s, defined in %s]",addr,(unsigned long)*((unsigned long *)addr),d.dli_sname, d.dli_fname);
+/*
+ * Gets the dwarf information for a variable 'varname',
+ * given an instruction address in a scope in
+ * which to search for a variable named 'varname'.
+ */
+void LDM_inspect(void *addr,const char *varname){
+  show_info_for_scoped_variable(addr,varname);
   return;
-
 }
 
+
+/*Show line 'line' of file 'fname'*/
 void LDM_showsource(char *fname, unsigned int line){
 
   int lines = 0;
@@ -74,6 +126,10 @@ void LDM_showsource(char *fname, unsigned int line){
 
 }
 
+/*
+ * Print all libraries that were LD_PRELOAD-ed
+ * before the program started
+ */
 void LDM_printlibs(char *c, void *d){
 
   if( strstr(c,"libldm.so") ){
@@ -83,6 +139,11 @@ void LDM_printlibs(char *c, void *d){
 
 }
 
+/*
+ * Print a stack trace -- this
+ * is intended to be used when
+ * the program is stopped, during debugging
+ */
 void print_trace(){
   void *array[10];
   int size;
@@ -95,7 +156,9 @@ void print_trace(){
   for (i = 2; i < size; i++){
 
     fprintf (stderr,"  %s\n", strings[i]);
-   /*
+
+    /*TODO: get_info is currently broken, and I don't know why*/
+    /*
     if( strstr(strings[i],"/libc.") ){
       fprintf(stderr,"\n");
       continue;
@@ -118,14 +181,16 @@ void print_trace(){
       fprintf(stderr," %s",get_info(array[i],temp));
     }
     fprintf(stderr,"\n");
-    free( temp );
-   */
+    free( temp );*/
   }
      
   free (strings);
 
 }
 
+/*
+ * Get the program's name, by looking at /proc/self/exe
+ */
 char *getProgramName(){
   char *buf = (char*)malloc(1024);
   memset(buf,0,1024);
@@ -133,6 +198,9 @@ char *getProgramName(){
   return buf;
 }
 
+/*
+ * The main debug command loop.
+ */
 void LDM_debug(){
 
   print_trace();
@@ -177,9 +245,10 @@ void LDM_debug(){
 
     if(line && strstr(line,"inspect")){
       unsigned long ad;
+      char varname[512];
       char insp[8];
-      sscanf(line,"%s %lx\n",insp,&ad);
-      LDM_inspect((void*)ad);
+      sscanf(line,"%s %lx %s\n",insp,&ad,varname);
+      LDM_inspect((void*)ad,(const char *)varname);
       continue;
     }
 
@@ -192,7 +261,10 @@ void LDM_debug(){
 
         char sc_str[6];
         void *ad;
-        sscanf(line,"%s 0x%p\n",sc_str,&ad);
+        int num = sscanf(line,"%s 0x%p\n",sc_str,&ad);
+        if( num == 1 ){
+          getReturnAddr(ad);  
+        }
         fprintf(stderr,"str is %s, address is %p\n",sc_str, ad);
         LDM_scope_a(ad); 
         continue;
@@ -227,15 +299,19 @@ void LDM_debug(){
 
 }
 
-
+/*
+ * This function is called when any catchable signal is caught.
+ * The first thing it does is go into the debugger loop.
+ * When the user exits the debugger loop, the program continues
+ * by executing the program's original signal handler, or the
+ * default handler, if the program has registered no handler.
+ */
 void terminationHandler(int signum){
 
   ldmmsg(stderr,"Process %d got signal %d.  Entering LDM Debugger\n",getpid(),signum); 
 
   LDM_debug();
 
-  /*The following code calls the program's signal handlers after returning from the debugger*/
-  /*I don't know what the right behavior is for this case*/
   if( signum == SIGSEGV){
 
     if( sigSEGVSaver.sa_handler != SIG_DFL &&
@@ -268,6 +344,9 @@ void terminationHandler(int signum){
 
 }
 
+/*
+ * Set up the signal handling support
+ */
 void setupSignals(){
 
   memset(&sigABRTSaver, 0, sizeof(struct sigaction));
@@ -287,6 +366,15 @@ void setupSignals(){
   
 }
 
+/*
+ * The initializer implementation.
+ * 1)Print welcome
+ * 2)Show preloaded libraries
+ * 3)Setup signal handling
+ * 4)Register replacement pthread_create
+ * 5)Get the program's name
+ * 6)Enter the debugger loop
+ */
 void LDM_init(){
 
   ldmmsg(stderr,"Legerdemain - Brandon Lucia - 2011\n");
@@ -306,6 +394,9 @@ void LDM_init(){
   
 }
 
+/*
+ * No tasks need to be performed on shutdown currently.
+ */
 void LDM_deinit(){
 
 }
