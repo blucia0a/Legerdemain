@@ -198,6 +198,22 @@ char *getProgramName(){
   return buf;
 }
 
+void print_help(){
+  fprintf(stderr,"\
+help - this message\n \
+quit - exit the program\n \
+cont - continue executing.  Leaves the LDM debugger.\n \
+run  - run the program.\n \
+show - show <file> <line>. Shows the source code at <line> in <file>.\n \
+inspect - shows the value of a memory location [currently unsafe!].\n \
+dumpdwarf - shows all debug info in the exeuctable.\n \
+ascope - ascope <instruction address>.  Prints a chain of scopes leading down to the innermost one enclosing address <instruction address>.\n \
+fscope - fscope <file> <line>. Prints a chain of scopes leading down to the innermost one enclosing the first instruction of the code on line <line> in <file>\n \
+linetoaddr - linetoaddr <file> <line>.  Prints the instruction address of the first instruction of he code on line <line> in <file>.\n \
+bt/backtrace/where - Prints the call stack.\n \
+\n");
+}
+
 /*
  * The main debug command loop.
  */
@@ -211,6 +227,10 @@ void LDM_debug(){
     /*Decide what to do based on the command!*/
     if(line && !strncmp(line,"",1)){
       continue;
+    }
+    
+    if(line && strstr(line,"help")){
+      print_help();
     }
 
     if(line && strstr(line,"quit")){

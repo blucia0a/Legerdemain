@@ -9,7 +9,7 @@
 #include "stack.h"
 #include "dwarfclient.h"
 
-void decode_location(Dwarf_Locdesc *locationList, Dwarf_Signed listLength, long *offset, long *init_val, int *frameRel){
+static void decode_location(Dwarf_Locdesc *locationList, Dwarf_Signed listLength, long *offset, long *init_val, int *frameRel){
 
   /*Location Decoding Code from http://ns.dyninst.org/coverage/dyninstAPI/src/parseDwarf.C.gcov.html*/
   Stack *opStack = (Stack*)malloc(sizeof(Stack));
@@ -294,7 +294,7 @@ void decode_location(Dwarf_Locdesc *locationList, Dwarf_Signed listLength, long 
 }  
 
 
-void show_all_attrs(Dwarf_Die die, unsigned long level, void *ndata){
+static void show_all_attrs(Dwarf_Die die, unsigned long level, void *ndata){
   Dwarf_Error error;
   Dwarf_Half tag; 
   dwarf_tag(die,&tag,&error);
@@ -432,65 +432,7 @@ void show_all_attrs(Dwarf_Die die, unsigned long level, void *ndata){
 
 }
 
-void show_info_for_containing_pc_ranges(Dwarf_Die die, int enclosing, unsigned long iaddr){
-
-  /*This function visits the children of a die in sequence, 
-   *applying the action() function to each*/
-  Dwarf_Attribute highattr;
-  Dwarf_Attribute lowattr;
-  Dwarf_Addr loval,hival;
-  Dwarf_Bool has;
-  Dwarf_Error error;
-  Dwarf_Half tag; 
-  
-  loval = hival = 0x0;
-  int enc = 0;
-
-  dwarf_tag(die,&tag,&error);
- 
-  if( tag == DW_TAG_variable ||
-      tag == DW_TAG_formal_parameter ){
-
-    if(enclosing){
-      char *name;
-      dwarf_diename(die,&name,&error);
-      fprintf(stderr,"%s, ",name);
-      //show_all_attrs(die,0,NULL);
-    }
-     
-  }
-
-  if( tag == DW_TAG_lexical_block || tag == DW_TAG_subprogram ){
-    if( dwarf_lowpc(die,&loval,&error) == DW_DLV_OK  && dwarf_highpc(die,&hival,&error) == DW_DLV_OK
-        && iaddr >=loval && iaddr <= hival ){ 
-      enc = 1;
-      fprintf(stderr,"\n=================================\n");
-      show_all_attrs(die,0,NULL);
-      fprintf(stderr,"=================================\n");
-    }
-  
-  }
-  
-  Dwarf_Die kid;
-  if( dwarf_child(die,&kid,&error) == DW_DLV_NO_ENTRY ){
-    return;
-  }
-  show_info_for_containing_pc_ranges(kid, enc, iaddr); 
-  //visit_die(kid,level+1,action,adata); 
-
-  int chret;
-  while( (chret = dwarf_siblingof(d,kid,&kid,&error)) != DW_DLV_NO_ENTRY &&
-           chret != DW_DLV_ERROR){
-
-    show_info_for_containing_pc_ranges(kid, enc, iaddr); 
-    //visit_die(kid,level+1,action,adata);
-
-  }
-
-  return;
-}
-
-Dwarf_Die get_cu_by_iaddr(unsigned long iaddr){
+static Dwarf_Die get_cu_by_iaddr(unsigned long iaddr){
  
   Dwarf_Unsigned cu_h_len;
   Dwarf_Half verstamp;
@@ -538,7 +480,7 @@ Dwarf_Die get_cu_by_iaddr(unsigned long iaddr){
 }
  
 
-void visit_die(Dwarf_Die die, unsigned long level, void (*action)(Dwarf_Die,unsigned long, void *d),void *adata){
+static void visit_die(Dwarf_Die die, unsigned long level, void (*action)(Dwarf_Die,unsigned long, void *d),void *adata){
 
   /*This function visits the children of a die in sequence, 
    *applying the action() function to each*/
@@ -563,6 +505,136 @@ void visit_die(Dwarf_Die die, unsigned long level, void (*action)(Dwarf_Die,unsi
   
 }
 
+static void reset_cu_header_info(){
+  Dwarf_Unsigned cu_h_len;
+  Dwarf_Half verstamp;
+  Dwarf_Unsigned abbrev_offset;
+  Dwarf_Half addrsize;
+  Dwarf_Unsigned next_cu;
+  Dwarf_Error error; 
+  while( dwarf_next_cu_header(d,&cu_h_len,&verstamp,&abbrev_offset,&addrsize,&next_cu,&error) != DW_DLV_NO_ENTRY );
+}
+
+
+static void DC_show_info_for_scoped_variable(Dwarf_Die die, int enclosing, unsigned long iaddr, const char *varname){
+
+  /*This function visits the children of a die in sequence, 
+   *applying the action() function to each*/
+  Dwarf_Attribute highattr;
+  Dwarf_Attribute lowattr;
+  Dwarf_Addr loval,hival;
+  Dwarf_Bool has;
+  Dwarf_Error error;
+  Dwarf_Half tag; 
+  
+  loval = hival = 0x0;
+  int enc = 0;
+
+  dwarf_tag(die,&tag,&error);
+ 
+  if( tag == DW_TAG_variable ||
+      tag == DW_TAG_formal_parameter ){
+
+    if(enclosing){
+      char *name;
+      dwarf_diename(die,&name,&error);
+      if(!strncmp(name,varname,strlen(varname))){
+        //fprintf(stderr,"%s, ",name);
+        show_all_attrs(die,0,NULL);
+      }
+    }
+     
+  }
+
+  if( tag == DW_TAG_lexical_block || tag == DW_TAG_subprogram ){
+    if( dwarf_lowpc(die,&loval,&error) == DW_DLV_OK  && dwarf_highpc(die,&hival,&error) == DW_DLV_OK
+        && iaddr >=loval && iaddr <= hival ){ 
+      enc = 1;
+    }
+  
+  }
+  
+  Dwarf_Die kid;
+  if( dwarf_child(die,&kid,&error) == DW_DLV_NO_ENTRY ){
+    return;
+  }
+  DC_show_info_for_scoped_variable(kid, enc, iaddr,varname); 
+  //visit_die(kid,level+1,action,adata); 
+
+  int chret;
+  while( (chret = dwarf_siblingof(d,kid,&kid,&error)) != DW_DLV_NO_ENTRY &&
+           chret != DW_DLV_ERROR){
+
+    DC_show_info_for_scoped_variable(kid, enc, iaddr,varname); 
+    //visit_die(kid,level+1,action,adata);
+
+  }
+
+  return;
+}
+
+static void DC_show_info_for_containing_pc_ranges(Dwarf_Die die, int enclosing, unsigned long iaddr){
+
+  /*This function visits the children of a die in sequence, 
+   *applying the action() function to each*/
+  Dwarf_Attribute highattr;
+  Dwarf_Attribute lowattr;
+  Dwarf_Addr loval,hival;
+  Dwarf_Bool has;
+  Dwarf_Error error;
+  Dwarf_Half tag; 
+  
+  loval = hival = 0x0;
+  int enc = 0;
+
+  dwarf_tag(die,&tag,&error);
+ 
+  if( tag == DW_TAG_variable ||
+      tag == DW_TAG_formal_parameter ){
+
+    if(enclosing){
+      char *name;
+      dwarf_diename(die,&name,&error);
+      fprintf(stderr,"%s, ",name);
+      //show_all_attrs(die,0,NULL);
+    }
+     
+  }
+
+  if( tag == DW_TAG_lexical_block || tag == DW_TAG_subprogram ){
+    if( dwarf_lowpc(die,&loval,&error) == DW_DLV_OK  && dwarf_highpc(die,&hival,&error) == DW_DLV_OK
+        && iaddr >=loval && iaddr <= hival ){ 
+      enc = 1;
+      fprintf(stderr,"\n=================================\n");
+      show_all_attrs(die,0,NULL);
+      fprintf(stderr,"=================================\n");
+    }
+  
+  }
+  
+  Dwarf_Die kid;
+  if( dwarf_child(die,&kid,&error) == DW_DLV_NO_ENTRY ){
+    return;
+  }
+  DC_show_info_for_containing_pc_ranges(kid, enc, iaddr); 
+  //visit_die(kid,level+1,action,adata); 
+
+  int chret;
+  while( (chret = dwarf_siblingof(d,kid,&kid,&error)) != DW_DLV_NO_ENTRY &&
+           chret != DW_DLV_ERROR){
+
+    DC_show_info_for_containing_pc_ranges(kid, enc, iaddr); 
+    //visit_die(kid,level+1,action,adata);
+
+  }
+
+  return;
+}
+
+static Dwarf_Die get_block_by_iaddr(unsigned long iaddr){
+  Dwarf_Die cu = get_cu_by_iaddr(iaddr); 
+   
+}
 
 unsigned long get_iaddr_of_file_line(const char *file, unsigned line){
  
@@ -608,13 +680,6 @@ unsigned long get_iaddr_of_file_line(const char *file, unsigned line){
 }
 
 
-
-
-Dwarf_Die get_block_by_iaddr(unsigned long iaddr){
-  Dwarf_Die cu = get_cu_by_iaddr(iaddr); 
-   
-}
-
 void dump_dwarf_info(){
 
   Dwarf_Unsigned cu_h_len;
@@ -652,15 +717,6 @@ void dump_dwarf_info(){
 
 }
 
-void reset_cu_header_info(){
-  Dwarf_Unsigned cu_h_len;
-  Dwarf_Half verstamp;
-  Dwarf_Unsigned abbrev_offset;
-  Dwarf_Half addrsize;
-  Dwarf_Unsigned next_cu;
-  Dwarf_Error error; 
-  while( dwarf_next_cu_header(d,&cu_h_len,&verstamp,&abbrev_offset,&addrsize,&next_cu,&error) != DW_DLV_NO_ENTRY );
-}
 
 void show_scopes_by_file_line(char *fileline_fn, int fileline_ln){
   unsigned long a = get_iaddr_of_file_line(fileline_fn,fileline_ln);
@@ -668,7 +724,7 @@ void show_scopes_by_file_line(char *fileline_fn, int fileline_ln){
   Dwarf_Die cu = get_cu_by_iaddr(a);
   reset_cu_header_info();
   if(a != 0xffffffffffffffff && (long int)cu != -1){
-    show_info_for_containing_pc_ranges(cu,0,a);
+    DC_show_info_for_containing_pc_ranges(cu,0,a);
   }else{
     fprintf(stderr,"I can't find address %x\n",a);
   }
@@ -681,12 +737,27 @@ void show_scopes_by_addr(void *addr){
   Dwarf_Die cu = get_cu_by_iaddr(a);
   reset_cu_header_info();
   if(a != 0xffffffffffffffff && (long int)cu != -1){
-    show_info_for_containing_pc_ranges(cu,0,a);
+    DC_show_info_for_containing_pc_ranges(cu,0,a);
   }else{
     fprintf(stderr,"I can't find address %x\n",a);
   }
   fprintf(stderr,"\n");
 }
+
+void show_info_for_scoped_variable(void *addr,const char * varname){
+  unsigned long a = (unsigned long)addr;
+  reset_cu_header_info();
+  Dwarf_Die cu = get_cu_by_iaddr(a);
+  reset_cu_header_info();
+  if(a != 0xffffffffffffffff && (long int)cu != -1){
+    DC_show_info_for_scoped_variable(cu,0,a,varname);
+  }else{
+    fprintf(stderr,"Can't find \"%s\" in scope defined by <%x>\n",varname, a);
+  }
+  fprintf(stderr,"\n");
+}
+
+
 
 #ifdef DWARF_CLIENT_LIB
 int opendwarf(char *argv){
@@ -760,7 +831,7 @@ int main(int argc, char **argv){
     reset_cu_header_info();
     Dwarf_Die cu = get_cu_by_iaddr(a);
     reset_cu_header_info();
-    show_info_for_containing_pc_ranges(cu,0,a);
+    DC_show_info_for_containing_pc_ranges(cu,0,a);
     fprintf(stderr,"\n");
   }
 
