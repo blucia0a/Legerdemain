@@ -293,6 +293,34 @@ static void decode_location(Dwarf_Locdesc *locationList, Dwarf_Signed listLength
   *offset = Stack_Top(opStack);
 }  
 
+static void DC_get_location_attr_value(Dwarf_Attribute at, DC_location *dcl){
+  /*
+   * It is assumed that at has a block form, and is a location list
+   * so this won't fail.  Caller is responsible for checking.
+   */
+
+  Dwarf_Locdesc *locationList;
+  Dwarf_Signed listLength;
+  Dwarf_Error error;
+  int frameRel = 0;
+  long offset = 0;
+  int i;
+  int ret = dwarf_loclist( at, &locationList, &listLength, &error );
+  if( ret != DW_DLV_OK ){
+    return;
+  }
+
+  /*Get the location info*/
+  decode_location(locationList,listLength,&(dcl->offset),NULL,&(dcl->isFrameOffset));
+
+  /*Clean up*/
+  for( i = 0; i < listLength; ++i){
+    dwarf_dealloc(d,locationList[i].ld_s,DW_DLA_LOC_BLOCK);               
+  }
+  dwarf_dealloc(d,locationList,DW_DLA_LOCDESC);               
+  
+}
+
 
 static void show_all_attrs(Dwarf_Die die, unsigned long level, void *ndata){
   Dwarf_Error error;
@@ -386,7 +414,7 @@ static void show_all_attrs(Dwarf_Die die, unsigned long level, void *ndata){
                attr == DW_AT_string_length ||
                attr == DW_AT_use_location ||
                attr == DW_AT_return_addr){
-            
+              /* 
               Dwarf_Locdesc *locationList;
               Dwarf_Signed listLength;
               int ret = dwarf_loclist( atlist[i], &locationList, &listLength, &error );
@@ -398,9 +426,11 @@ static void show_all_attrs(Dwarf_Die die, unsigned long level, void *ndata){
                 dwarf_dealloc(d,locationList[i].ld_s,DW_DLA_LOC_BLOCK);               
               }
               dwarf_dealloc(d,locationList,DW_DLA_LOCDESC);               
-
-              fprintf(stderr," %s:",frameRel ? "FP Offset" : "Address");
-              fprintf(stderr," %ld\n",offset);
+              */
+              DC_location dcl;
+              DC_get_location_attr_value(atlist[i],&dcl); 
+              fprintf(stderr," %s:",dcl.isFrameOffset ? "FP Offset" : "Address");
+              fprintf(stderr," %ld\n",dcl.offset);
 
             }else{
               fprintf(stderr,"UNSUPPORTED ATTRIBUTE TYPE\n");
@@ -515,8 +545,7 @@ static void reset_cu_header_info(){
   while( dwarf_next_cu_header(d,&cu_h_len,&verstamp,&abbrev_offset,&addrsize,&next_cu,&error) != DW_DLV_NO_ENTRY );
 }
 
-
-static void DC_show_info_for_scoped_variable(Dwarf_Die die, int enclosing, unsigned long iaddr, const char *varname){
+static void DC_get_info_for_scoped_variable(Dwarf_Die die, int enclosing, unsigned long iaddr, const char *varname, Dwarf_Die *retDie){
 
   /*This function visits the children of a die in sequence, 
    *applying the action() function to each*/
@@ -539,8 +568,8 @@ static void DC_show_info_for_scoped_variable(Dwarf_Die die, int enclosing, unsig
       char *name;
       dwarf_diename(die,&name,&error);
       if(!strncmp(name,varname,strlen(varname))){
-        //fprintf(stderr,"%s, ",name);
-        show_all_attrs(die,0,NULL);
+        *retDie = die;
+        return;
       }
     }
      
@@ -558,19 +587,34 @@ static void DC_show_info_for_scoped_variable(Dwarf_Die die, int enclosing, unsig
   if( dwarf_child(die,&kid,&error) == DW_DLV_NO_ENTRY ){
     return;
   }
-  DC_show_info_for_scoped_variable(kid, enc, iaddr,varname); 
-  //visit_die(kid,level+1,action,adata); 
+  DC_get_info_for_scoped_variable(kid, enc, iaddr,varname,retDie); 
 
   int chret;
   while( (chret = dwarf_siblingof(d,kid,&kid,&error)) != DW_DLV_NO_ENTRY &&
            chret != DW_DLV_ERROR){
 
-    DC_show_info_for_scoped_variable(kid, enc, iaddr,varname); 
-    //visit_die(kid,level+1,action,adata);
+    DC_get_info_for_scoped_variable(kid, enc, iaddr,varname,retDie); 
 
   }
 
   return;
+
+}
+
+static void DC_show_info_for_scoped_variable(Dwarf_Die die, unsigned long iaddr, const char *varname){
+
+  Dwarf_Die v;
+  v = (Dwarf_Die)0;
+  
+  DC_get_info_for_scoped_variable(die,0,iaddr,varname,&v);
+  if( v != (Dwarf_Die)-1 ){
+
+    show_all_attrs(die,0,NULL);
+
+  }else{
+    fprintf(stderr,"Couldn't get info for %s in scope at %lx\n",varname,iaddr);
+  }
+
 }
 
 static void DC_show_info_for_containing_pc_ranges(Dwarf_Die die, int enclosing, unsigned long iaddr){
@@ -744,16 +788,62 @@ void show_scopes_by_addr(void *addr){
   fprintf(stderr,"\n");
 }
 
-void show_info_for_scoped_variable(void *addr,const char * varname){
+long get_location_of_scoped_variable(void *addr,const char * varname){
+
+  Dwarf_Error error;
   unsigned long a = (unsigned long)addr;
+
   reset_cu_header_info();
+
   Dwarf_Die cu = get_cu_by_iaddr(a);
+
   reset_cu_header_info();
+
   if(a != 0xffffffffffffffff && (long int)cu != -1){
-    DC_show_info_for_scoped_variable(cu,0,a,varname);
+
+    Dwarf_Die v;
+    v = (Dwarf_Die)0; 
+    DC_get_info_for_scoped_variable(cu,0,a,varname,&v);
+    if( v != (Dwarf_Die)-1 ){
+
+      Dwarf_Attribute loc;
+      dwarf_attr(v,DW_AT_location,&loc,&error);
+
+      DC_location dloc;
+      DC_get_location_attr_value(loc,&dloc);
+      return dloc.offset;
+    }
+
   }else{
+
     fprintf(stderr,"Can't find \"%s\" in scope defined by <%x>\n",varname, a);
+
   }
+
+  fprintf(stderr,"\n");
+
+}
+
+void show_info_for_scoped_variable(void *addr,const char * varname){
+
+  unsigned long a = (unsigned long)addr;
+
+  reset_cu_header_info();
+
+  Dwarf_Die cu = get_cu_by_iaddr(a);
+
+  reset_cu_header_info();
+
+  if(a != 0xffffffffffffffff && (long int)cu != -1){
+
+    DC_show_info_for_scoped_variable(cu,a,varname);
+
+  }else{
+
+    fprintf(stderr,"Can't find \"%s\" in scope defined by <%x>\n",varname, a);
+
+  }
+
   fprintf(stderr,"\n");
 }
 

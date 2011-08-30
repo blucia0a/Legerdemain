@@ -44,6 +44,10 @@ struct sigaction sigSEGVSaver;
 struct sigaction sigTERMSaver;
 struct sigaction sigINTSaver;
 
+static void *curDebugInstr;
+static void *curDebugFramePtr;
+
+
 /*LDM's constructor and destructor*/
 void __attribute__ ((constructor)) LDM_init();
 void __attribute__ ((destructor)) LDM_deinit();
@@ -59,14 +63,14 @@ static bool LDM_runstate;
  * LDM has its own version that tracks additional
  * information about each threads' activities
  */
-LDM_ORIG_DECL(int, pthread_create, pthread_t *, const pthread_attr_t *,
-              void *(*)(void*), void *);
-int pthread_create(pthread_t *thread,
-              const pthread_attr_t *attr,
-              void *(*start_routine)(void*), void *arg){
+//LDM_ORIG_DECL(int, pthread_create, pthread_t *, const pthread_attr_t *,
+              //void *(*)(void*), void *);
+//int pthread_create(pthread_t *thread,
+              //const pthread_attr_t *attr,
+              //void *(*start_routine)(void*), void *arg){
 
-  return LDM_ORIG(pthread_create)(thread,attr,start_routine,arg);
-}
+  //return LDM_ORIG(pthread_create)(thread,attr,start_routine,arg);
+//}
 
 /*
  * The following functions wrap the dwarf information
@@ -75,6 +79,7 @@ int pthread_create(pthread_t *thread,
  * each of these does.
  */
 
+
 /*
  * Print the instruction pointer of the first instruction
  * on line 'line' of the file 'file'
@@ -82,6 +87,11 @@ int pthread_create(pthread_t *thread,
 void LDM_line_to_addr(char *file, int line){
   void * a = (void*)get_iaddr_of_file_line(file,line);
   fprintf(stderr,"%p\n",a);
+}
+
+long LDM_locate_var(void *addr,char *var){
+  long loc = get_location_of_scoped_variable(addr,var);
+  return loc;
 }
 
 /*
@@ -109,7 +119,10 @@ void LDM_scope_a(void *addr){
  * which to search for a variable named 'varname'.
  */
 void LDM_inspect(void *addr,const char *varname){
-  show_info_for_scoped_variable(addr,varname);
+  //show_info_for_scoped_variable(addr,varname);
+  //fprintf(stderr,"done showing the info\n");
+  long loc = LDM_locate_var(addr,(char *)varname);
+  fprintf(stderr,"Located at %s %ld\n",loc < 0 ? "EBP + " : "",loc);
   return;
 }
 
@@ -145,13 +158,13 @@ void LDM_printlibs(char *c, void *d){
  * the program is stopped, during debugging
  */
 void print_trace(){
-  void *array[10];
+  void * const array[10];
   int size;
   char **strings;
   int i;
 
   size = backtrace (array, 10);
-  strings = (char **)backtrace_symbols (array, size);
+  strings = backtrace_symbols (array, size);
      
   for (i = 2; i < size; i++){
 
@@ -217,20 +230,53 @@ bt/backtrace/where - Prints the call stack.\n \
 /*
  * The main debug command loop.
  */
-void LDM_debug(){
+void LDM_debug(ucontext_t *ctx){
+
+  int curDebugFrame = 0;
+  if(ctx == NULL){
+    getcontext(ctx);
+  }
 
   print_trace();
+
+  if(ctx != (ucontext_t*)INIT_CTX){
+
+    fprintf(stderr,"Instruction: %p\n",ctx->uc_mcontext.gregs[REG_RIP]);
+    fprintf(stderr,"Frame Pointer: %p\n",ctx->uc_mcontext.gregs[REG_RBP]);
+    fprintf(stderr,"Stack Pointer: %p\n",ctx->uc_mcontext.gregs[REG_RSP]);
+
+    curDebugInstr = (void*)ctx->uc_mcontext.gregs[REG_RIP];
+    curDebugFramePtr = (void*)ctx->uc_mcontext.gregs[REG_RBP];
+
+  }else{
+    curDebugInstr = (void*)0x0;
+    curDebugFramePtr = (void*)0x0;
+  }
+
   while(1){
 
     char *line = readline("LDM>");
-    
+  
+     
+ 
     /*Decide what to do based on the command!*/
     if(line && !strncmp(line,"",1)){
       continue;
     }
     
+    add_history(line);
+    
     if(line && strstr(line,"help")){
       print_help();
+    }
+
+    if(line && strstr(line,"fptr")){
+      if(ctx && ctx != (ucontext_t*)INIT_CTX){
+        fprintf(stderr,"%lx\n",ctx->uc_mcontext.gregs[REG_RBP]);
+      }else{
+        fprintf(stderr,"No Frame Pointer Available\n");
+      }
+      continue;
     }
 
     if(line && strstr(line,"quit")){
@@ -262,6 +308,96 @@ void LDM_debug(){
       LDM_showsource(fname,lineno);
       continue;
     }
+    
+    if(line && strstr(line,"deref")){
+      unsigned long ad;
+      char insp[8];
+      int num = sscanf(line,"%s %lx\n",insp,&ad);
+      fprintf(stderr,"%lx\n",*((unsigned long *)ad));
+      continue;
+    }
+
+    if(line && strstr(line,"showvars")){
+      LDM_vars_a(curDebugInstr); 
+      continue;
+    }
+
+    if(line && strstr(line,"up")){
+      
+      if(ctx && ctx != (ucontext_t*)INIT_CTX){
+
+        int i;
+
+        /*TODO: Bounds check this somehow*/
+        curDebugFrame++;
+
+        curDebugFramePtr = (void*)ctx->uc_mcontext.gregs[REG_RBP];
+        for(i = 0; i < curDebugFrame; i++){
+          fprintf(stderr,"Next Frame Pointer: %p.\n",curDebugFramePtr);
+          
+          curDebugFramePtr = ((void**)curDebugFramePtr)[0];
+        }
+
+        curDebugInstr = ((void**)curDebugFramePtr)[1];
+
+        fprintf(stderr,"Frame Pointer: %p.  Instruction: %p\n",curDebugFramePtr,curDebugInstr);
+
+      }else{
+
+        fprintf(stderr,"No Frame Pointer Available\n");
+
+      }
+      
+      continue; 
+
+    }
+    
+    if(line && strstr(line,"down")){
+
+      if(ctx && ctx != (ucontext_t*)INIT_CTX){
+
+        int i;
+        if(curDebugFrame > 0){
+          curDebugFrame--;
+        }
+
+        curDebugFramePtr = (void*)ctx->uc_mcontext.gregs[REG_RBP];
+        for(i = 0; i < curDebugFrame; i++){
+          curDebugFramePtr = ((void**)curDebugFramePtr)[0];
+        }
+
+        if( curDebugFrame > 0 ){
+          curDebugInstr = ((void**)curDebugFramePtr)[1];
+        }else{
+          curDebugInstr = (void*)ctx->uc_mcontext.gregs[REG_RIP];
+        }
+        fprintf(stderr,"Frame Pointer: %p.  Instruction: %p\n",curDebugFramePtr,curDebugInstr);
+
+      }else{
+
+        fprintf(stderr,"No Frame Pointer Available\n");
+
+      }
+      
+      continue; 
+
+    }
+    
+    if(line && strstr(line,"string")){
+      unsigned long ad;
+      char insp[8];
+      sscanf(line,"%s %lx\n",insp,&ad);
+
+      int len = 0;
+      char *c = (char *)ad;
+      while(*c++ != 0){len++; }
+
+      char str[len+1];
+      strncpy(str,c,len);
+
+      fprintf(stderr,"%s\n",str);
+      continue;
+    }
 
     if(line && strstr(line,"inspect")){
       unsigned long ad;
@@ -283,9 +419,8 @@ void LDM_debug(){
         void *ad;
         int num = sscanf(line,"%s 0x%p\n",sc_str,&ad);
         if( num == 1 ){
-          getReturnAddr(ad);  
+          LDM_scope_a(curDebugInstr);
         }
-        fprintf(stderr,"str is %s, address is %p\n",sc_str, ad);
         LDM_scope_a(ad); 
         continue;
     }
@@ -326,11 +461,13 @@ void LDM_debug(){
  * by executing the program's original signal handler, or the
  * default handler, if the program has registered no handler.
  */
-void terminationHandler(int signum){
+void terminationHandler(int signum, siginfo_t *sinf, void *uctx){
 
+
+  ucontext_t *ctx = (ucontext_t *)uctx;
   ldmmsg(stderr,"Process %d got signal %d.  Entering LDM Debugger\n",getpid(),signum); 
 
-  LDM_debug();
+  LDM_debug(ctx);
 
   if( signum == SIGSEGV){
 
@@ -376,9 +513,9 @@ void setupSignals(){
       
   /*Register Signal handler for SEGV and TERM*/
   struct sigaction segv_sa;
-  segv_sa.sa_handler = terminationHandler;
+  segv_sa.sa_sigaction = terminationHandler;
   sigemptyset(&segv_sa.sa_mask);
-  segv_sa.sa_flags = SA_ONSTACK;
+  segv_sa.sa_flags = SA_ONSTACK | SA_SIGINFO;
   sigaction(SIGSEGV,&segv_sa,&sigSEGVSaver);
   sigaction(SIGTERM,&segv_sa,&sigTERMSaver);
   sigaction(SIGABRT,&segv_sa,&sigABRTSaver);
@@ -405,12 +542,12 @@ void LDM_init(){
   ldmmsg(stderr,"\n");
 
   setupSignals();
-  LDM_REG(pthread_create);
+  //LDM_REG(pthread_create);
 
   LDM_ProgramName = getProgramName();
   opendwarf(LDM_ProgramName);
 
-  LDM_debug();
+  LDM_debug((ucontext_t*)INIT_CTX);
   
 }
 

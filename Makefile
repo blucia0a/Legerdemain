@@ -39,8 +39,8 @@ scaley_test:
 a2ltest: testLibA2L.c $(LDM_LIBDIR)/libaddr2line.a
 	gcc -g ./testLibA2L.c -o $(LDM_TESTDIR)/testLibA2L -L$(LDM_LIBDIR) -laddr2line -liberty 
 
-dwarfinfo: dwarfclient.c $(LDM_LIBDIR)/libstack.so
-	gcc -g -lelf -L$(DWARFDIR) -ldwarf -L$(LDM_LIBDIR) -lstack -I$(DWARFDIR) ./dwarfclient.c  -o $(BLD_DIR)/dwarfinfo
+dwarfinfo: dwarfclient.c $(LDM_LIBDIR)/libstack.a
+	gcc -g -lelf -L$(DWARFDIR) -ldwarf -I$(DWARFDIR) ./dwarfclient.c  $(LDM_LIBDIR)/libstack.a  -o $(LDM_BLDDIR)/dwarfinfo
 
 
 clean:

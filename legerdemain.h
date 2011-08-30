@@ -14,6 +14,7 @@
 #define false 0
 #endif
 
+#define INIT_CTX 0x1
 
 /*Construct the name of the pointer to the original function*/
 #define LDM_ORIG(f) __LDM ## f
@@ -29,7 +30,7 @@ ret (* LDM_ORIG(f))(args)
 dlerror(); \
 LDM_ORIG(f) = dlsym(RTLD_NEXT, #f); \
 if(LDM_ORIG(f) == NULL){ \
-  fprintf(stderr,"Couldn't load function: %s\n",dlerror()); \
+  fprintf(stderr,"Couldn't load function %s: %s\n",#f,dlerror()); \
 }
 
 
