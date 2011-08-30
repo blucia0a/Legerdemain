@@ -617,6 +617,59 @@ static void DC_show_info_for_scoped_variable(Dwarf_Die die, unsigned long iaddr,
 
 }
 
+
+static void DC_show_vars_for_containing_pc_ranges(Dwarf_Die die, int enclosing, unsigned long iaddr){
+
+  /*This function visits the children of a die in sequence, 
+   *applying the action() function to each*/
+  Dwarf_Attribute highattr;
+  Dwarf_Attribute lowattr;
+  Dwarf_Addr loval,hival;
+  Dwarf_Bool has;
+  Dwarf_Error error;
+  Dwarf_Half tag; 
+  
+  loval = hival = 0x0;
+  int enc = 0;
+
+  dwarf_tag(die,&tag,&error);
+ 
+  if( tag == DW_TAG_variable ||
+      tag == DW_TAG_formal_parameter ){
+
+    if(enclosing){
+      char *name;
+      dwarf_diename(die,&name,&error);
+      fprintf(stderr,"%s, ",name);
+    }
+     
+  }
+
+  if( tag == DW_TAG_lexical_block || tag == DW_TAG_subprogram ){
+    if( dwarf_lowpc(die,&loval,&error) == DW_DLV_OK  && dwarf_highpc(die,&hival,&error) == DW_DLV_OK
+        && iaddr >=loval && iaddr <= hival ){ 
+      enc = 1;
+    }
+  
+  }
+  
+  Dwarf_Die kid;
+  if( dwarf_child(die,&kid,&error) == DW_DLV_NO_ENTRY ){
+    return;
+  }
+  DC_show_vars_for_containing_pc_ranges(kid, enc, iaddr); 
+
+  int chret;
+  while( (chret = dwarf_siblingof(d,kid,&kid,&error)) != DW_DLV_NO_ENTRY &&
+           chret != DW_DLV_ERROR){
+
+    DC_show_vars_for_containing_pc_ranges(kid, enc, iaddr); 
+
+  }
+
+  return;
+}
+
 static void DC_show_info_for_containing_pc_ranges(Dwarf_Die die, int enclosing, unsigned long iaddr){
 
   /*This function visits the children of a die in sequence, 
@@ -771,6 +824,19 @@ void show_scopes_by_file_line(char *fileline_fn, int fileline_ln){
     DC_show_info_for_containing_pc_ranges(cu,0,a);
   }else{
     fprintf(stderr,"I can't find address %x\n",a);
+  }
+  fprintf(stderr,"\n");
+}
+
+void show_vars_by_scope_addr(void *addr){
+  unsigned long a = (unsigned long)addr;
+  reset_cu_header_info();
+  Dwarf_Die cu = get_cu_by_iaddr(a);
+  reset_cu_header_info();
+  if(a != 0xffffffffffffffff && (long int)cu != -1){
+    DC_show_vars_for_containing_pc_ranges(cu,0,a);
+  }else{
+    fprintf(stderr,"I can't find address %lx\n",a);
   }
   fprintf(stderr,"\n");
 }

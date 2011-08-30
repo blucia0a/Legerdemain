@@ -10,6 +10,7 @@ void show_scopes_by_file_line(char *fileline_fn, int fileline_ln);
 void show_scopes_by_addr(void *addr);
 void show_info_for_scoped_variable(void *addr, const char *varname);
 long get_location_of_scoped_variable(void *addr, const char *varname);
+void show_vars_by_scope_addr(void *addr);
 
 #ifdef DWARF_CLIENT_LIB
 int getdwarfdata(char *argv);

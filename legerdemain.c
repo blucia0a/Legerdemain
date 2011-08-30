@@ -94,6 +94,12 @@ long LDM_locate_var(void *addr,char *var){
   return loc;
 }
 
+void LDM_vars_a(void *addr){
+
+  show_vars_by_scope_addr(addr);
+
+}
+
 /*
  * Print the sequence of scopes and the variables
  * in each for the provided file and line.  The scopes
@@ -123,6 +129,20 @@ void LDM_inspect(void *addr,const char *varname){
   //fprintf(stderr,"done showing the info\n");
   long loc = LDM_locate_var(addr,(char *)varname);
   fprintf(stderr,"Located at %s %ld\n",loc < 0 ? "EBP + " : "",loc);
+  if( loc < 0 ){
+    loc += 16;
+  }
+  fprintf(stderr,"4byte value is: ");
+  int i;
+  for(i = 1; i <= 4; i++){
+    fprintf(stderr,"%hhx",*((unsigned char*)(curDebugFramePtr + loc + (4-i))));
+  }
+  fprintf(stderr,"\n");
+  fprintf(stderr,"8byte value is: ");
+  for(i = 1; i <= 8; i++){
+    fprintf(stderr,"%hhx",*((unsigned char*)(curDebugFramePtr + loc + (8-i))));
+  }
+  fprintf(stderr,"\n");
   return;
 }
 
@@ -317,7 +337,7 @@ void LDM_debug(ucontext_t *ctx){
       continue;
     }
 
-    if(line && strstr(line,"showvars")){
+    if(line && strstr(line,"vars")){
       LDM_vars_a(curDebugInstr); 
       continue;
     }
@@ -403,7 +423,10 @@ void LDM_debug(ucontext_t *ctx){
       unsigned long ad;
       char varname[512];
       char insp[8];
-      sscanf(line,"%s %lx %s\n",insp,&ad,varname);
+      int num = sscanf(line,"%s %s %lx\n",insp,varname,&ad);
+      if(num == 2){
+        ad = (unsigned long)curDebugInstr;
+      }
       LDM_inspect((void*)ad,(const char *)varname);
       continue;
     }
