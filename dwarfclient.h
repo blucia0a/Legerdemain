@@ -13,6 +13,7 @@ typedef struct _DC_location{
 typedef struct _DC_type{
 
   unsigned indirectionLevel;
+  unsigned arrayLevel;
   char *name;
   unsigned long byteSize; 
 
@@ -20,6 +21,8 @@ typedef struct _DC_type{
 
 Dwarf_Debug d;
 Dwarf_Error e;
+static void DC_resolve_type(Dwarf_Die v,DC_type *t);
+
 unsigned long get_iaddr_of_file_line(const char *file, unsigned line);
 void show_scopes_by_file_line(char *fileline_fn, int fileline_ln);
 void show_scopes_by_addr(void *addr);

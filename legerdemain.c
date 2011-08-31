@@ -141,8 +141,10 @@ void LDM_inspect(void *addr,const char *varname){
   for(i = 0; i < t->indirectionLevel; i++){
     fprintf(stderr,"*");
   }
-  fprintf(stderr,"%s = ",varname);
-
+  fprintf(stderr,"%s",varname);
+  for(i = 0; i < t->arrayLevel; i++){
+    fprintf(stderr,"[]");
+  }
   for(i = 1; i <= t->byteSize; i++){
     fprintf(stderr,"%hhx",*((unsigned char*)(curDebugFramePtr + loc + (t->byteSize-i))));
   }

@@ -660,9 +660,22 @@ static void DC_show_vars_for_containing_pc_ranges(Dwarf_Die die, int enclosing, 
       tag == DW_TAG_formal_parameter ){
 
     if(enclosing){
+
       char *name;
       dwarf_diename(die,&name,&error);
-      fprintf(stderr,"%s, ",name);
+      DC_type t;
+      DC_resolve_type(die,&t);
+      fprintf(stderr,"%s ",t.name);
+      int i;
+      for(i = 0; i < t.indirectionLevel; i++){
+        fprintf(stderr,"*");
+      }
+      fprintf(stderr,"%s",name);
+      for(i = 0; i < t.arrayLevel; i++){
+        fprintf(stderr,"[]");
+      }
+      fprintf(stderr,",");
+
     }
      
   }
@@ -894,6 +907,7 @@ static void DC_resolve_type(Dwarf_Die v, DC_type *t){
   DC_get_die_from_CU_relative_offset(v, off, &typeDie);
 
   int points = 0;
+  int arrs = 0;
   while( 1 ){
 
     Dwarf_Bool has;
@@ -907,6 +921,7 @@ static void DC_resolve_type(Dwarf_Die v, DC_type *t){
       dwarf_attr(typeDie,DW_AT_byte_size,&bsize,&error);
       dwarf_formudata(bsize,(Dwarf_Unsigned*)(&t->byteSize),&error);
       t->indirectionLevel = points;
+      t->arrayLevel = arrs;
       return;
       /*Note: I am assuming this must happen eventually.  can there
  *            be mutually referencing types?*/
@@ -920,6 +935,9 @@ static void DC_resolve_type(Dwarf_Die v, DC_type *t){
     dwarf_tag(typeDie,&tag,&error);
     if(tag == DW_TAG_pointer_type){
       points++;
+    }
+    if(tag == DW_TAG_array_type){
+      arrs++;
     }
     
     dwarf_attr(typeDie, DW_AT_type, &type, &error);
