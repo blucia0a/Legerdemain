@@ -3,6 +3,7 @@
 #include <string.h>
 
 void foo(unsigned int x, unsigned int y, unsigned char z, unsigned long q){
+  int *******qvv;
   int s = 0xbeefbeef;
   int t = 0xabababab; 
   fprintf(stderr,"s=%p t=%p x=%p, y=%p, z=%p, q=%p\n",&s, &t, &x, &y, &z, &q);  

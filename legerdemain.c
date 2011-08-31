@@ -94,6 +94,10 @@ long LDM_locate_var(void *addr,char *var){
   return loc;
 }
 
+DC_type *LDM_gettype_var(void *addr,char *var){
+  return get_type_of_scoped_variable(addr,var);
+}
+
 void LDM_vars_a(void *addr){
 
   show_vars_by_scope_addr(addr);
@@ -128,19 +132,19 @@ void LDM_inspect(void *addr,const char *varname){
   //show_info_for_scoped_variable(addr,varname);
   //fprintf(stderr,"done showing the info\n");
   long loc = LDM_locate_var(addr,(char *)varname);
-  fprintf(stderr,"Located at %s %ld\n",loc < 0 ? "EBP + " : "",loc);
+  DC_type *t = LDM_gettype_var(addr,(char*)varname);
   if( loc < 0 ){
     loc += 16;
   }
-  fprintf(stderr,"4byte value is: ");
+  fprintf(stderr,"%s ",t->name);
   int i;
-  for(i = 1; i <= 4; i++){
-    fprintf(stderr,"%hhx",*((unsigned char*)(curDebugFramePtr + loc + (4-i))));
+  for(i = 0; i < t->indirectionLevel; i++){
+    fprintf(stderr,"*");
   }
-  fprintf(stderr,"\n");
-  fprintf(stderr,"8byte value is: ");
-  for(i = 1; i <= 8; i++){
-    fprintf(stderr,"%hhx",*((unsigned char*)(curDebugFramePtr + loc + (8-i))));
+  fprintf(stderr,"%s = ",varname);
+
+  for(i = 1; i <= t->byteSize; i++){
+    fprintf(stderr,"%hhx",*((unsigned char*)(curDebugFramePtr + loc + (t->byteSize-i))));
   }
   fprintf(stderr,"\n");
   return;
@@ -237,7 +241,7 @@ help - this message\n \
 quit - exit the program\n \
 cont - continue executing.  Leaves the LDM debugger.\n \
 run  - run the program.\n \
-show - show <file> <line>. Shows the source code at <line> in <file>.\n \
+source - show <file> <line>. Shows the source code at <line> in <file>.\n \
 inspect - shows the value of a memory location [currently unsafe!].\n \
 dumpdwarf - shows all debug info in the exeuctable.\n \
 ascope - ascope <instruction address>.  Prints a chain of scopes leading down to the innermost one enclosing address <instruction address>.\n \
@@ -320,7 +324,7 @@ void LDM_debug(ucontext_t *ctx){
       }
     }
 
-    if(line && strstr(line,"show")){
+    if(line && strstr(line,"source")){
       char fname[2048];
       char show[5];
       int lineno;
@@ -337,7 +341,7 @@ void LDM_debug(ucontext_t *ctx){
       continue;
     }
 
-    if(line && strstr(line,"vars")){
+    if(line && strstr(line,"showvars")){
       LDM_vars_a(curDebugInstr); 
       continue;
     }

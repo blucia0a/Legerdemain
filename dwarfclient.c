@@ -293,6 +293,28 @@ static void decode_location(Dwarf_Locdesc *locationList, Dwarf_Signed listLength
   *offset = Stack_Top(opStack);
 }  
 
+static Dwarf_Off DC_get_CU_start_offset(Dwarf_Die v){
+  Dwarf_Error error;
+ 
+  Dwarf_Off dieOffset;
+  dwarf_dieoffset(v,&dieOffset,&error);
+  
+  Dwarf_Off dieCUOffset;
+  dwarf_die_CU_offset(v,&dieCUOffset,&error);
+
+  Dwarf_Off CUStart = dieOffset - dieCUOffset;
+  return CUStart;
+}
+
+static void DC_get_die_from_CU_relative_offset(Dwarf_Die v, Dwarf_Off off,Dwarf_Die *retDie){
+
+  Dwarf_Error error;
+
+  Dwarf_Off CUStart = DC_get_CU_start_offset(v);
+  dwarf_offdie(d,CUStart + off,retDie,&error);
+
+}
+
 static void DC_get_location_attr_value(Dwarf_Attribute at, DC_location *dcl){
   /*
    * It is assumed that at has a block form, and is a location list
@@ -567,7 +589,7 @@ static void DC_get_info_for_scoped_variable(Dwarf_Die die, int enclosing, unsign
     if(enclosing){
       char *name;
       dwarf_diename(die,&name,&error);
-      if(!strncmp(name,varname,strlen(varname))){
+      if(!strncmp(name,varname,strlen(name))){
         *retDie = die;
         return;
       }
@@ -854,6 +876,62 @@ void show_scopes_by_addr(void *addr){
   fprintf(stderr,"\n");
 }
 
+static void DC_resolve_type(Dwarf_Die v, DC_type *t){
+ 
+  /*TODO: Error Handling*/ 
+  Dwarf_Error error;
+  Dwarf_Attribute type;
+  Dwarf_Off off;
+  Dwarf_Die typeDie;
+  Dwarf_Half tag = 0; 
+  
+ /*
+ * Start with the variable,  not its type.  The loop
+ * unwraps all the types.
+ */
+  dwarf_attr(v, DW_AT_type, &type, &error);
+  dwarf_formref(type, &off, &error);
+  DC_get_die_from_CU_relative_offset(v, off, &typeDie);
+
+  int points = 0;
+  while( 1 ){
+
+    Dwarf_Bool has;
+    dwarf_hasattr(typeDie,DW_AT_type,&has,&error);
+    if(!has){ 
+
+      /*We've reached a base or structure type*/
+      dwarf_diename(typeDie,&(t->name),&error);
+  
+      Dwarf_Attribute bsize;
+      dwarf_attr(typeDie,DW_AT_byte_size,&bsize,&error);
+      dwarf_formudata(bsize,(Dwarf_Unsigned*)(&t->byteSize),&error);
+      t->indirectionLevel = points;
+      return;
+      /*Note: I am assuming this must happen eventually.  can there
+ *            be mutually referencing types?*/
+
+    }
+
+    /*Otherwise: this type has a type, so it is a pointer or a typedef
+ *               or an array type.  For now, we're only going to correctly
+ *               handle pointer types.(TODO:)
+ */
+    dwarf_tag(typeDie,&tag,&error);
+    if(tag == DW_TAG_pointer_type){
+      points++;
+    }
+    
+    dwarf_attr(typeDie, DW_AT_type, &type, &error);
+    dwarf_formref(type, &off, &error);
+
+    /*Note, the next line uses v, because it can use anything in the CU*/
+    DC_get_die_from_CU_relative_offset(v, off, &typeDie);
+
+  }
+
+}
+
 long get_location_of_scoped_variable(void *addr,const char * varname){
 
   Dwarf_Error error;
@@ -877,6 +955,10 @@ long get_location_of_scoped_variable(void *addr,const char * varname){
 
       DC_location dloc;
       DC_get_location_attr_value(loc,&dloc);
+
+
+
+      
       return dloc.offset;
     }
 
@@ -889,6 +971,45 @@ long get_location_of_scoped_variable(void *addr,const char * varname){
   fprintf(stderr,"\n");
 
 }
+
+DC_type *get_type_of_scoped_variable(void *addr,const char * varname){
+
+  Dwarf_Error error;
+  unsigned long a = (unsigned long)addr;
+
+  reset_cu_header_info();
+
+  Dwarf_Die cu = get_cu_by_iaddr(a);
+
+  reset_cu_header_info();
+
+  if(a != 0xffffffffffffffff && (long int)cu != -1){
+
+    Dwarf_Die v;
+    v = (Dwarf_Die)0; 
+    DC_get_info_for_scoped_variable(cu,0,a,varname,&v);
+    if( v != (Dwarf_Die)-1 ){
+
+      DC_type *t = (DC_type*)malloc(sizeof(DC_type));
+      t->byteSize = 0;
+      t->indirectionLevel = 0;
+      t->name = NULL;
+      DC_resolve_type(v,t);
+
+      
+      return t;
+    }
+
+  }else{
+
+    fprintf(stderr,"Can't find \"%s\" in scope defined by <%x>\n",varname, a);
+
+  }
+
+  fprintf(stderr,"\n");
+
+}
+      
 
 void show_info_for_scoped_variable(void *addr,const char * varname){
 
