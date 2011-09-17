@@ -5,7 +5,7 @@ LDM_LIBDIR=./libs
 LDM_TESTDIR=./tests
 
 all: libs
-libs: applier stack libdwarfclient a2l ldm scaley
+libs: applier stack libdwarfclient a2l ldm scaley thread_constructor
 progs: dwarfinfo
 test: a2ltest scaley_test 
 
@@ -28,7 +28,8 @@ libdwarfclient: dwarfclient.c dwarfclient.h $(LDM_LIBDIR)/libstack.a
 ldm: legerdemain.c legerdemain.h
 	gcc -fPIC legerdemain.c -o $(LDM_LIBDIR)/libldm.so -fPIC -shared -g -O3 -L$(DWARFDIR) -ldwarf -lbfd -lelf -ldl -lreadline $(LDM_LIBDIR)/libaddr2line.a $(LDM_LIBDIR)/libapplier.a $(LDM_LIBDIR)/libdwarfclient.a $(LDM_LIBDIR)/libstack.a
 
-
+thread_constructor:
+	gcc thread_constructor.c -o $(LDM_LIBDIR)/thread_constructor.so  -fPIC -shared -g -O3 -ldl
 
 scaley: $(LDM_LIBDIR)/libapplier.a
 	gcc scaley_LDM.c -o $(LDM_LIBDIR)/scaley_LDM.so -L$(LDM_LIBDIR) -lapplier -fPIC -shared -g -O3 -ldl

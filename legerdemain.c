@@ -1,4 +1,7 @@
 /*Included System Headers*/
+/*for backtrace_symbols*/
+#include <execinfo.h>
+
 /*for size_t*/
 #include <sys/types.h>
 
@@ -145,6 +148,7 @@ void LDM_inspect(void *addr,const char *varname){
   for(i = 0; i < t->arrayLevel; i++){
     fprintf(stderr,"[]");
   }
+  fprintf(stderr," = ");
   for(i = 1; i <= t->byteSize; i++){
     fprintf(stderr,"%hhx",*((unsigned char*)(curDebugFramePtr + loc + (t->byteSize-i))));
   }
@@ -184,7 +188,7 @@ void LDM_printlibs(char *c, void *d){
  * the program is stopped, during debugging
  */
 void print_trace(){
-  void * const array[10];
+  void * array[10];
   int size;
   char **strings;
   int i;

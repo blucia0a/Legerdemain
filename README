@@ -35,6 +35,8 @@ addr2line, the binutils program, I've added support for providing file:line
 
 /********************************/
 TODO:
+Generalize thread constructors -- the user should be able to provide a chain of constructors in the LDM_TCTR variable, that will be applied in sequence.
+
 Add support for inspecting data, inspecting arbitrary code, and
 jumping around the call stack to look at params, locals, etc.
 
