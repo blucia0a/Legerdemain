@@ -4,11 +4,20 @@ LDM_BLDDIR=./build
 LDM_LIBDIR=./libs
 LDM_TESTDIR=./tests
 
-all: libs
-libs: applier stack libdwarfclient a2l ldm scaley thread_constructor
+all: supportlibs plugins lib
+supportlibs: applier stack libdwarfclient a2l
+plugins: thread_constructor
+userplugins: null_thd_constructor
+lib: ldm
 progs: dwarfinfo
-test: a2ltest scaley_test 
 
+#TODO: Make test cases
+test: 
+
+
+###################################################
+#Rules to build the support libraries used by LDM
+###################################################
 stack: stack.c stack.h
 	gcc -fPIC -c stack.c -o $(LDM_LIBDIR)/stack.o -g -O3
 	ar rcs $(LDM_LIBDIR)/libstack.a $(LDM_LIBDIR)/stack.o
@@ -25,23 +34,34 @@ libdwarfclient: dwarfclient.c dwarfclient.h $(LDM_LIBDIR)/libstack.a
 	gcc -fPIC -c -g -DDWARF_CLIENT_LIB -I$(DWARFDIR) ./dwarfclient.c  -o $(LDM_LIBDIR)/dwarfclient.o
 	ar rcs $(LDM_LIBDIR)/libdwarfclient.a $(LDM_LIBDIR)/dwarfclient.o
 
+
+###################################################
+#Rule to build the main LDM shared library
+###################################################
 ldm: legerdemain.c legerdemain.h
 	gcc -fPIC legerdemain.c -o $(LDM_LIBDIR)/libldm.so -fPIC -shared -g -O3 -L$(DWARFDIR) -ldwarf -lbfd -lelf -ldl -lreadline $(LDM_LIBDIR)/libaddr2line.a $(LDM_LIBDIR)/libapplier.a $(LDM_LIBDIR)/libdwarfclient.a $(LDM_LIBDIR)/libstack.a
 
-thread_constructor:
-	gcc thread_constructor.c -o $(LDM_LIBDIR)/thread_constructor.so  -fPIC -shared -g -O3 -ldl
 
-scaley: $(LDM_LIBDIR)/libapplier.a
-	gcc scaley_LDM.c -o $(LDM_LIBDIR)/scaley_LDM.so -L$(LDM_LIBDIR) -lapplier -fPIC -shared -g -O3 -ldl
 
-scaley_test:
-	gcc scaleytest.c -o $(LDM_TESTDIR)/scaleytest -g
+###################################################
+#Rule to build internally used LDM plugins 
+###################################################
+thread_constructor: $(LDM_LIBDIR)/libapplier.a
+	gcc thread_constructor.c -o $(LDM_LIBDIR)/thread_constructor.so  -L$(LDM_LIBDIR) -lapplier -fPIC -shared -g -O3 -ldl
 
-a2ltest: testLibA2L.c $(LDM_LIBDIR)/libaddr2line.a
-	gcc -g ./testLibA2L.c -o $(LDM_TESTDIR)/testLibA2L -L$(LDM_LIBDIR) -laddr2line -liberty 
+###################################################
+#Rule to build user plugins (e.g., thread ctr lib) 
+###################################################
+null_thd_constructor: 
+	gcc null_thd_constructor.c -o $(LDM_LIBDIR)/null_thd_constructor.so -fPIC -shared -g -O3
 
+
+###################################################
+#Rule to build the standalone dwarf dumping utility
+###################################################
 dwarfinfo: dwarfclient.c $(LDM_LIBDIR)/libstack.a
 	gcc -g -lelf -L$(DWARFDIR) -ldwarf -I$(DWARFDIR) ./dwarfclient.c  $(LDM_LIBDIR)/libstack.a  -o $(LDM_BLDDIR)/dwarfinfo
+
 
 
 clean:
