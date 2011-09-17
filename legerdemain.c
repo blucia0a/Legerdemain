@@ -61,20 +61,6 @@ static char *LDM_ProgramName;
 /*Records whether the program is running or not*/
 static bool LDM_runstate;
 
-/* 
- * Replacement version of pthread_create --
- * LDM has its own version that tracks additional
- * information about each threads' activities
- */
-//LDM_ORIG_DECL(int, pthread_create, pthread_t *, const pthread_attr_t *,
-              //void *(*)(void*), void *);
-//int pthread_create(pthread_t *thread,
-              //const pthread_attr_t *attr,
-              //void *(*start_routine)(void*), void *arg){
-
-  //return LDM_ORIG(pthread_create)(thread,attr,start_routine,arg);
-//}
-
 /*
  * The following functions wrap the dwarf information
  * access support provided by libdwarfclient.  See
@@ -575,12 +561,16 @@ void LDM_init(){
   ldmmsg(stderr,"\n");
 
   setupSignals();
-  //LDM_REG(pthread_create);
+
+
+  char *dbg = getenv("LDM_DEBUG");
 
   LDM_ProgramName = getProgramName();
   opendwarf(LDM_ProgramName);
 
-  LDM_debug((ucontext_t*)INIT_CTX);
+  if( dbg != NULL ){
+    LDM_debug((ucontext_t*)INIT_CTX);
+  }
   
 }
 
