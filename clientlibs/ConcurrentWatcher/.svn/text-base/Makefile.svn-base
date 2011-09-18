@@ -1,0 +1,9 @@
+DRPDIR=/sampa/home/blucia/cvsandbox/DRProbe/drprobe/
+
+all: watch_addr_thd_constructor
+
+watch_addr_thd_constructor:
+	gcc watch_addr_thd_constructor.c -o watch_addr_thd_constructor.so -I$(DRPDIR) -L$(DRPDIR) -ldrprobe -fPIC -shared -g -O3
+
+clean:
+	rm *.so
