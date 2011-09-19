@@ -1,0 +1,31 @@
+ConcurrentWatcher - Brandon Lucia - 2011
+
+Concurrent Watcher is a tool that can be used in conjunction with Legerdemain (https://www.github.com/blucia0a/Legerdemain).
+
+Concurrent Watcher provides the ability to monitor a pair of code points or memory locations using hardware watchpoints.  The tool works if you register it as a thread initializer for Legerdemain.
+
+Building:
+
+Run 'make' to produce ConcurrentWatcher.so
+
+Use:
+
+Run a program using ldm.sh, and specify the path to your build of
+ConcurrentWatcher.so in the LDM_TCTR environment variable. ConcurrentWatcher
+was built as a one-off project, and hasn't been fully generalized yet.  At the
+moment, it watches two code locations that can be specified in the LDM_SRC and
+LDM_SINK environment variables.  ConcurrentWatcher uses sampling.  LDM_RATE
+specifies how long to wait between samples, specified in microseconds.  The
+output of ConcurrentWatcher is one line per thread, each line indicating the
+thread ID, the number of times LDM_SRC caused a breakpoint trap, and the number
+of times LDM_SINK caused a breakpoint trap.
+
+Implementation:
+
+ConcurrentWatcher is implemented using ldm's thread_constructor component.  ConcurrentWatcher provides a thread constructor function that spawns a monitor thread.  The monitor thread loops infinitely, sleeping LDM_RATE seconds per iteration.   Upon waking up, the monitor pthread_kill()s all other threads with SIG_USR1 (a "poke", in the implementation).  Threads have registered handlers so that when they are poked, they call into DRProbe (https://www.github.com/blucia0a/drprobe), and set the hardware watchpoints to watch LDM_SRC and LDM_SINK.  When a watchpoint/breakpoint is hit, and leads to a trap, threads update their event counters, and return execution to the program. 
+
+Notes:
+
+*Sampling:  It is recommended that the sample rate not be less than 100.  Even at 100, pokes will be occurring very frequently.  Poking is a major source of overhead.  The default rate is 1000.
+
+

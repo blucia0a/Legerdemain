@@ -36,7 +36,11 @@ void *monitor(void *p){
   fprintf(stderr,"Monitor is %lu\n",(unsigned long)pthread_self());
   char *pp = getenv("LDM_RATE");
   unsigned long r;
-  sscanf(pp,"%lu",&r);
+  if(pp != NULL){
+    sscanf(pp,"%lu",&r);
+  }else{
+    r = 1000;
+  }
   while(1){
 
     //sleep a hundredth of a second
