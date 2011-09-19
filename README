@@ -1,16 +1,127 @@
-Legerdemain - Brandon Lucia - 2011
+Legerdemain - Brandon Lucia - 2011 - University of Washington
 
-A debugger focused on instrumenting programs, replacing/wrapping functions, and
-monitoring/collecting information at runtime.  To use LDM plugins
-(like scaley_LDM.so), you need to LD_PRELOAD libldm.so and scaley_LDM.so by
-setting LD_PRELOAD=<path>/libldm.so:<path>/scaley_LDM.so in your environment.
+Legerdemain (LDM) is a debugger focused on instrumenting programs,
+replacing/wrapping functions, and monitoring/collecting information at runtime.
+The main goal of LDM, in contrast with something like GDB is that LDM aims to
+be ridiculously efficient by default, and to provide facilities for users to
+add functionality as needed.  I consider LDM most useful for getting information
+out of programs that you don't have the freedom to change.  I find it useful in
+building research program analysis tools, as the assumption for work like that
+is usually that the programs being analyzed are out of the control of the
+analyzer.  LDM can instrument functions, threads, and instructions.  The Core
+Functionality section talks about how it does that, via Plugins and Thread
+Constructor Plugins.   
 
-scaley_LDM.so shows how to use LDM macros to instrument a function call (read,
-in this example) with your version.  It shows how to call the original as well.
+Core Functionality:
+-------------------
+LDM is centered around the idea of plugins.  LDM
+plugins can do lots of different things.  Plugins can wrap existing library
+functions.  Plugins can provide additional debugging facilities (like thread_constructor).  Plugins can provide application level profiling and debugging
+support (like clientlibs/ConcurrentWatcher).
 
-libldm.so does/will implement management and instrumentation.  ldm.sh <your
-program> will run your program, load your plugins, and provide debugging
-support, should you receive any fatal signals.
+ldm.sh <your program> runs your program under a default configuration.  It will
+load plugins, and provide a debug shell, should you receive any fatal signals.
+
+Plugins
+.......
+Plugins extend LDM's core functionality.  The simplest kind of plugin is one
+that replaces all calls to one function with a function in the plugin.  To do
+so, you can use the LDM_REG, LDM_ORIG, and LDM_ORIG_DECL macros.  These mostly
+just wrap LD_PRELOAD/dlopen/dlsym stuff, but in my opinion, make them much less
+unweildy.  Concretely, to wrap a function (malloc, say):
+
+
+Pseudo-Code Example 1: Instrumenting calls to malloc.  imalloc.c
+=========================================
+#include "legerdemain.h"
+#include <malloc.h>
+#include <stdio.h>
+
+int malloccount;
+LDM_ORIG_DECL(void *,malloc,size_t);
+void *malloc(size_t sz){
+  malloccount++;
+  return LDM_ORIG(malloc)(sz);
+}
+
+void __attribute__ ((constructor))init();
+void __attribute__ ((destructor)) deinit();
+void init(){
+  ldmmsg(stderr,"Loading fancy malloc plugin\n");
+  LDM_REG(malloc);
+}
+
+void deinit(){
+  ldmmsg(stderr,"Unloading fancy malloc plugin\n");
+  ldmmsg(stderr,"Malloc was called %d times\n",malloccount);
+}
+=========================================
+
+The plugin can be built as a .so, by running
+
+gcc -fPIC -shared -o imalloc.so imalloc.c -ldl
+
+That will produce imalloc.so.    This plugin uses LDM_ORIG_DECL to declare that
+the function malloc is being replaced.  Then, in the plugin's version of
+malloc(), the original version of malloc() is called using LDM_ORIG(malloc).
+Finally, LDM_REG is called in init() to register the replacement with LDM.
+ldmmsg(f,s) prints the string s to the FILE *f with [LDM] before it, so you
+know where your messages are originating, and they don't get mixed up with
+program output.  All this stuff is defined in legerdemain.h.
+
+To cause LDM to load imalloc.so, run
+
+LDM_CLIENTLIBS=imalloc.so ldm.sh <any program>
+
+Generally, the LDM_CLIENTLIBS variable loads LDM plugins at runtime, within
+ldm.sh.  Note that plugins are *not* thread safe, unless you make them thread
+safe.  For example, if this plugin is run on a multithreaded program,
+malloccount would need to be protected with a lock.  Also note that you must
+specify that init and deinit are to be run when the library is loaded by
+specifying the constructor and destructor attributes.  This is going to be cleaned up in a future version of LDM.
+
+
+
+Thread Constructors
+...................
+In addition to plugins, "thread constructor" plugins can be built.  A thread
+constructor must define a function called "init_thread".  This function is
+called by every thread the program spawns before entering its start_routine.  
+
+The function has the following signature:
+
+void init_thread(void *arg,void *(*start_routine)(void *));
+
+The "arg" argument is the void * argument passed to pthread_create when the
+program created the thread.  The "start_routine" argument is the void *(*)(void
+*) argument passed to pthread_create.  The routine is exposed to thread
+constructors in case a program has a need to selectively apply instrumentation
+to only threads executing a certain function.
+
+Thread constructors are conceptually a "subclass" of plugins.  They can still
+do all the things that plugins can do (use LDM_ORIG_DECL, etc), but they also
+allow you to expose the init_thread function.  Thread Constructors are
+specified via the LDM_TCTR (NOT LDM_CLIENTLIBS) environment variable, and are
+loaded by ldm's thread_constructor module, when it is loaded by LDM.  A better
+tutorial example of a thread constructor is forthcoming.
+
+An example of a thread_constructor plugin is in clientlibs/ConcurrentWatcher.
+ConcurrentWatcher is documented in its own README file.  It is the best
+illustration of a thread_constructor.  To build a new thread_constructor
+plugin, it is probably best to work from this example.  To build
+ConcurrentWatcher, just run make in its directory.
+
+
+DEBUGGING SUPPORT:
+------------------
+LDM will catch fatal signals and drop to a shell.  The shell has a few useful commands, to look at memory addresses, query for live variables, etc. 'help' in the shell will overview the commands.  To force the debug shell at startup, you can specify LDM_DEBUG=1 in your environment before running ldm.sh.
+
+
+ELF/DWARF Support:
+------------------
+LDM has rudimentary support for looking at dwarf/elf information.  Running ldm,
+you can type 'help'.  This will present you with a list of possible commands,
+most of which related to debug info.
 
 libdwarfclient is used by libldm to access dwarf information in elf program
 binaries.  dwarfinfo is a standalone program that can be used to access
@@ -24,22 +135,7 @@ useful in 3 ways right now.
 
 
 
-/********************************/
-Notes:
-This project is changing!
-There is support being added for debugging.  Presently, on receiving SIGINT,
-ABRT, SEGV, or TERM control falls to the LDM debugger.  Using a version of
-addr2line, the binutils program, I've added support for providing file:line
-(function) information up the call stack.
-
-
-/********************************/
-TODO:
-Generalize thread constructors -- the user should be able to provide a chain of constructors in the LDM_TCTR variable, that will be applied in sequence.
-
-Add support for inspecting data, inspecting arbitrary code, and
-jumping around the call stack to look at params, locals, etc.
-
+----------------------------------------------------------------------------
 Add support for user defined watchpoints, via drprobe (github.com/blucia0a/drprobe).
 
 Add support for generic instrumentation (non function call based)
