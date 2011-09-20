@@ -4,7 +4,7 @@ LDM_BLDDIR=./build
 LDM_LIBDIR=./libs
 LDM_TESTDIR=./tests
 
-all: supportlibs plugins lib
+all: supportlibs plugins lib userplugins
 supportlibs: applier stack libdwarfclient a2l
 plugins: thread_constructor
 userplugins: null_thd_constructor
@@ -47,7 +47,7 @@ ldm: legerdemain.c legerdemain.h
 #Rule to build internally used LDM plugins 
 ###################################################
 thread_constructor: $(LDM_LIBDIR)/libapplier.a
-	gcc thread_constructor.c -o $(LDM_LIBDIR)/thread_constructor.so  -L$(LDM_LIBDIR) -lapplier -fPIC -shared -g -O3 -ldl
+	gcc thread_constructor.c -o $(LDM_LIBDIR)/thread_constructor.so  -L$(LDM_LIBDIR) -lapplier -fPIC -shared -g -O3 -ldl -lldm
 
 ###################################################
 #Rule to build user plugins (e.g., thread ctr lib) 

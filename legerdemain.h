@@ -1,5 +1,7 @@
 /*To ensure RTLD_NEXT is defined*/
+#ifndef __USE_GNU
 #define __USE_GNU
+#endif
 
 /*For dynamic loading support*/
 #include <dlfcn.h>//for RTLD_NEXT
@@ -53,3 +55,12 @@ ucontext_t ucontext; \
 if( getcontext(&ucontext) != -1 ){ \
   x = ((void**)ucontext.uc_mcontext.gregs[REG_RBP])[1]; \
 }
+
+/*Plugin constructor/destructor magic*/
+#define LDM_PLUGIN_INIT __attribute__ ((constructor))
+#define LDM_PLUGIN_DEINIT __attribute__ ((destructor))
+
+/*Thread destructor magic*/
+#define LDM_THD_DTR_DECL(k,f) pthread_key_t k;
+#define LDM_REGISTER_THD_DTR(k,f) pthread_key_create(&k,f)
+#define LDM_INSTALL_THD_DTR(k) pthread_setspecific(k,(void*)0x1)
