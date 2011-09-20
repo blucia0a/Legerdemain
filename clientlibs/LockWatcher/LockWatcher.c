@@ -24,20 +24,5 @@ static void init(){
   ldmmsg(stderr,"Initializing LockWatcher Plugin!\n");
   LDM_REG(pthread_mutex_lock);
   LDM_REG(pthread_mutex_unlock);
-  /*
-  void *h = NULL;
-  h = dlopen("/lib/libpthread.so.0",RTLD_LAZY);
-  if(h == NULL){
-    fprintf(stderr,"couldn't open pthreads %s\n",dlerror());
-  }else{
-    LDM_pthread_mutex_lock = dlsym(h,"pthread_mutex_lock");
-    LDM_pthread_mutex_unlock = dlsym(h,"pthread_mutex_unlock");
-    if(LDM_pthread_mutex_lock == NULL){
-      fprintf(stderr,"Couldn't get lock\n");
-    }
-    if(LDM_pthread_mutex_unlock == NULL){
-      fprintf(stderr,"Couldn't get unlock\n");
-    }
-  }
-  */
+
 }

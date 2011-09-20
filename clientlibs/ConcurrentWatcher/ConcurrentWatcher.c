@@ -1,5 +1,9 @@
+
+#ifndef __USE_GNU
+#define __USE_GNU
 #define _GNU_SOURCE
 #include <ucontext.h>
+#endif
 
 #include <stdio.h>
 #include <signal.h>
@@ -9,18 +13,21 @@
 #include <pthread.h>
 
 #include "drprobe.h"
+#include "legerdemain.h"
 
 #define MAX_NUM_THREADS 512
 int (*myPthreadCreate)(pthread_t *thread,
               const pthread_attr_t *attr,
               void *(*start_routine)(void*), void *arg);
+int (*myPthreadLock)(pthread_mutex_t *mutex);
+int (*myPthreadUnlock)(pthread_mutex_t *mutex);
 
 pthread_t monitorThread;
 
 pthread_mutex_t threadListLock;
 pthread_t threadList[MAX_NUM_THREADS];
 
-pthread_key_t dkey;
+LDM_THD_DTR_DECL(dkey,deinitthread);
 
 void *gsrcAddr;
 void *gsinkAddr;
@@ -30,6 +37,7 @@ __thread void *sinkAddr;
 __thread unsigned long srcFreq;
 __thread unsigned long sinkFreq;
 __thread unsigned long threadId;
+
 
 void *monitor(void *p){
 
@@ -46,7 +54,7 @@ void *monitor(void *p){
     //sleep a hundredth of a second
     usleep(r);
 
-    pthread_mutex_lock(&threadListLock);
+    myPthreadLock(&threadListLock);
     int i;
     for(i = 0; i < MAX_NUM_THREADS; i++){
       if( threadList[i] != (pthread_t)0 ){ 
@@ -54,7 +62,7 @@ void *monitor(void *p){
         pthread_kill(threadList[i],SIGUSR1);
       }
     }
-    pthread_mutex_unlock(&threadListLock);
+    myPthreadUnlock(&threadListLock);
   }
  
 }
@@ -88,7 +96,7 @@ void handleTrap(int signum, siginfo_t *sinfo, void *ctx){
 
 void deinit_thread(void *d){
 
-  pthread_mutex_lock(&threadListLock);
+  myPthreadLock(&threadListLock);
   drp_unwatch(0);
   drp_unwatch(1);
   int i;
@@ -98,23 +106,31 @@ void deinit_thread(void *d){
       threadList[i] = (pthread_t)0;
     }
   }
-  pthread_mutex_unlock(&threadListLock);
+  myPthreadUnlock(&threadListLock);
 
   fprintf(stderr,"%lu %lu %lu\n",threadId,srcFreq,sinkFreq);
 
 }
 
 
-void __attribute__ ((constructor)) watch_addr_thd_ctr_init();
-void watch_addr_thd_ctr_init(){
+void LDM_PLUGIN_INIT watch_addr_thd_ctr_init(){
+
 
   void *h = NULL;
-  h = dlopen("/lib/libpthread.so.0",RTLD_LAZY);
+  h = dlopen("libpthread.so.0",RTLD_LAZY);
   if(h == NULL){
     fprintf(stderr,"couldn't open pthreads %s\n",dlerror());
   }else{
     myPthreadCreate = dlsym(h,"pthread_create");
+    myPthreadLock = dlsym(h,"pthread_mutex_lock");
+    myPthreadUnlock= dlsym(h,"pthread_mutex_unlock");
     if(myPthreadCreate == NULL){
+      fprintf(stderr,"Couldn't get pthread_create\n");
+    }
+    if(myPthreadLock == NULL){
+      fprintf(stderr,"Couldn't get pthread_create\n");
+    }
+    if(myPthreadUnlock == NULL){
       fprintf(stderr,"Couldn't get pthread_create\n");
     }
   }
@@ -128,7 +144,7 @@ void watch_addr_thd_ctr_init(){
 
   pthread_mutex_init(&threadListLock,NULL);
 
-  pthread_key_create(&dkey,deinit_thread);
+  LDM_REGISTER_THD_DTR(dkey,deinit_thread);
 
   myPthreadCreate(&monitorThread,NULL,monitor,NULL);
 
@@ -158,7 +174,7 @@ void init_thread(void *targ, void*(*thdrtn)(void*)){
     return; 
   }
 
-  pthread_setspecific(dkey,(void*)0x1);
+  LDM_INSTALL_THD_DTR(dkey);
 
   struct sigaction zact;
   zact.sa_sigaction = handlePoke;
@@ -168,7 +184,7 @@ void init_thread(void *targ, void*(*thdrtn)(void*)){
   srcAddr = gsrcAddr;
   sinkAddr = gsinkAddr;
   
-  pthread_mutex_lock(&threadListLock);
+  myPthreadLock(&threadListLock);
   int i;
   for(i = 0; i < MAX_NUM_THREADS; i++){
     if( threadList[i] == (pthread_t)0 ){ 
@@ -178,7 +194,7 @@ void init_thread(void *targ, void*(*thdrtn)(void*)){
       break;
     }
   }
-  pthread_mutex_unlock(&threadListLock);
+  myPthreadUnlock(&threadListLock);
 
   fprintf(stderr,"[WATCHER] Setting instruction watchpoints on %p and %p\n",srcAddr,sinkAddr);
   if( srcAddr != NULL ){
@@ -189,6 +205,6 @@ void init_thread(void *targ, void*(*thdrtn)(void*)){
     drp_watch_inst((unsigned long)sinkAddr,1);
   }
   
-
-
 }
+
+

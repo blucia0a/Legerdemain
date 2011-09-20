@@ -69,7 +69,7 @@ void loadConstructor(char *ctrLibName, void *data){
 }
 
 static void __attribute__ ((constructor))init();
-void __attribute__ ((destructor)) deinit();
+static void __attribute__ ((destructor)) deinit();
 static void init(){
 
   ldmmsg(stderr,"[THREAD CTR] Initializing...\n"); 
@@ -82,6 +82,6 @@ static void init(){
  
 }
 
-void deinit(){
+static void deinit(){
   
 }

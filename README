@@ -31,45 +31,55 @@ just wrap LD_PRELOAD/dlopen/dlsym stuff, but in my opinion, make them much less
 unweildy.  Concretely, to wrap a function (malloc, say):
 
 
-Pseudo-Code Example 1: Instrumenting calls to malloc.  imalloc.c
+Pseudo-Code Example 1: Instrumenting calls to malloc.  MallocWatcher.c
 =========================================
-#include "legerdemain.h"
 #include <malloc.h>
 #include <stdio.h>
 
-int malloccount;
+#include "legerdemain.h"
+
+static int malloccount;
 LDM_ORIG_DECL(void *,malloc,size_t);
 void *malloc(size_t sz){
   malloccount++;
+  if( LDM_ORIG(malloc) == NULL ){
+    fprintf(stderr,"[MALLOCWATCHER] Forced To register in replacement malloc\n");
+    LDM_REG(malloc);
+  }
   return LDM_ORIG(malloc)(sz);
 }
 
-void __attribute__ ((constructor))init();
-void __attribute__ ((destructor)) deinit();
-void init(){
-  ldmmsg(stderr,"Loading fancy malloc plugin\n");
+static void __attribute__ ((constructor)) init();
+static void init(){
   LDM_REG(malloc);
+  ldmmsg(stderr,"[MALLOCWATCHER] Loading fancy malloc plugin\n");
 }
 
-void deinit(){
-  ldmmsg(stderr,"Unloading fancy malloc plugin\n");
-  ldmmsg(stderr,"Malloc was called %d times\n",malloccount);
+static void __attribute__ ((constructor)) deinit();
+static void deinit(){
+  ldmmsg(stderr,"[MALLOCWATCHER] Unloading fancy malloc plugin\n");
+  ldmmsg(stderr,"[MALLOCWATCHER] Malloc was called %d times\n",malloccount);
 }
 =========================================
 
 The plugin can be built as a .so, by running
 
-gcc -fPIC -shared -o imalloc.so imalloc.c -ldl
+gcc -fPIC -shared -o MallocWatcher.so MallocWatcher.c -ldl
 
-That will produce imalloc.so.    This plugin uses LDM_ORIG_DECL to declare that
-the function malloc is being replaced.  Then, in the plugin's version of
-malloc(), the original version of malloc() is called using LDM_ORIG(malloc).
-Finally, LDM_REG is called in init() to register the replacement with LDM.
-ldmmsg(f,s) prints the string s to the FILE *f with [LDM] before it, so you
-know where your messages are originating, and they don't get mixed up with
-program output.  All this stuff is defined in legerdemain.h.
+That will produce MallocWatcher.so.    This plugin uses LDM_ORIG_DECL to
+declare that the function malloc is being replaced.  Then, in the plugin's
+version of malloc(), the original version of malloc() is called using
+LDM_ORIG(malloc).  Finally, LDM_REG is called in init() to register the
+replacement with LDM.  Note that in some cases, the function you are replacing
+may be called during your plugin's initialization.  You need to be sure it
+isn't being called before LDM_REG() is called.  The NULL guard in malloc() in
+the above example illustrates this.  This will be made more convenient in a
+future version of LDM.  ldmmsg(f,s) prints the string s to the FILE *f with
+[LDM] before it, so you know where your messages are originating, and they
+don't get mixed up with program output.  All this stuff is defined in
+legerdemain.h.
 
-To cause LDM to load imalloc.so, run
+To cause LDM to load MallocWatcher.so, run
 
 LDM_CLIENTLIBS=imalloc.so ldm.sh <any program>
 
