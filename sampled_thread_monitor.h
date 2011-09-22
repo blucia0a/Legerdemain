@@ -1,3 +1,4 @@
+#include <ucontext.h>
 typedef enum _SamplingState{
   SAMPLE_ON = 0,
   SAMPLE_OFF 
@@ -7,4 +8,4 @@ typedef enum _SamplingState{
 
 void sampled_thread_monitor_deinit(void *d);
 void sampled_thread_monitor_thread_init(void *targ, void*(*thdrtn)(void*));
-void sampled_thread_monitor_init(void *data,void (*ph)(SamplingState));
+void sampled_thread_monitor_init(void *data,void (*ph)(SamplingState, ucontext_t *));

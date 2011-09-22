@@ -14,7 +14,7 @@ __thread SamplingState samplingState;
 __thread unsigned long threadId;
 
 /*This gets called in handlePoke, and implements the user's poke handling*/
-void (*clientPokeHandler)(SamplingState s);
+void (*clientPokeHandler)(SamplingState s,ucontext_t *);
 
 int (*myPthreadCreate)(pthread_t *thread,
               const pthread_attr_t *attr,
@@ -95,14 +95,14 @@ static void handlePoke(int signum, siginfo_t *sinfo, void *ctx){
   if( samplingState == SAMPLE_OFF ){
 
     if(clientPokeHandler){
-      clientPokeHandler(SAMPLE_ON);
+      clientPokeHandler(SAMPLE_ON,(ucontext_t *)ctx);
     }
     samplingState = SAMPLE_ON;
 
   }else{
 
     if(clientPokeHandler){
-      clientPokeHandler(SAMPLE_OFF);
+      clientPokeHandler(SAMPLE_OFF,(ucontext_t *)ctx);
     }
     samplingState = SAMPLE_OFF;
 
@@ -172,7 +172,7 @@ void sampled_thread_monitor_thread_init(void *targ, void*(*thdrtn)(void*)){
 
 }
 
-void sampled_thread_monitor_init(void *data,void (*ph)(SamplingState)){
+void sampled_thread_monitor_init(void *data,void (*ph)(SamplingState, ucontext_t *)){
 
   clientPokeHandler = ph;
   void *h = NULL;

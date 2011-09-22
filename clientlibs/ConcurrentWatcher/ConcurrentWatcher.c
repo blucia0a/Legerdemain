@@ -43,7 +43,7 @@ __thread unsigned long sinkFreq;
 __thread unsigned long sinkComm;
 
 
-void getPoked(SamplingState s){
+void getPoked(SamplingState s,ucontext_t *ctx){
 
   if( s == SAMPLE_ON){
 
