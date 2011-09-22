@@ -64,3 +64,6 @@ if( getcontext(&ucontext) != -1 ){ \
 #define LDM_THD_DTR_DECL(k,f) pthread_key_t k;
 #define LDM_REGISTER_THD_DTR(k,f) pthread_key_create(&k,f)
 #define LDM_INSTALL_THD_DTR(k) pthread_setspecific(k,(void*)0x1)
+
+/*Get the value of a register as a void pointer*/
+#define LDM_GET_REG(ctx,reg) (((ucontext_t*)ctx)->uc_mcontext.gregs[reg]);
