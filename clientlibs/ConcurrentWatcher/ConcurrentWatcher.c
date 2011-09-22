@@ -20,7 +20,7 @@
 #define MAX_NUM_THREADS 512
 
 /*Declare that we'll be using a thread destructor*/
-LDM_THD_DTR_DECL(dkey,CW_deinit);
+LDM_THD_DTR_DECL(dkey,deinit_thread);
 
 /*Data related to communication monitoring*/
 /*Global version of src and sink addresses*/
@@ -134,7 +134,7 @@ void handleTrap(int signum, siginfo_t *sinfo, void *ctx){
 
 }
 
-void deinit_thread(void *d){
+static void deinit_thread(void *d){
 
   sampled_thread_monitor_deinit(d);
   

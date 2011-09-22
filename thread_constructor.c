@@ -74,7 +74,7 @@ static void init(){
 
   ldmmsg(stderr,"[THREAD CTR] Initializing...\n"); 
   LDM_REG(pthread_create);
-  char *p = getenv("LDM_TCTR"); 
+  char *p = getenv("LDM_TAPS"); 
   if( p != NULL ){
     ldmmsg(stderr,"[THREAD CTR] Thread Constructor: %s\n",p);
     applyToTokens(p,":,",loadConstructor,NULL);

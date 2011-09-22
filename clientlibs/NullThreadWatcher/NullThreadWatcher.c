@@ -4,9 +4,9 @@
 #include "legerdemain.h"
 
 /*Declare that we'll be using a thread destructor*/
-LDM_THD_DTR_DECL(dkey,CW_deinit);
+LDM_THD_DTR_DECL(dkey,deinit_thread);
 
-void deinit_thread(void *d){
+static void deinit_thread(void *d){
 
   fprintf(stderr,"Done with thread %lu!\n",(unsigned long)pthread_self());
 

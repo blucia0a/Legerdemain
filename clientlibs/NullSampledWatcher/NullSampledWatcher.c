@@ -18,7 +18,7 @@
 #define MAX_NUM_THREADS 512
 
 /*Declare that we'll be using a thread destructor*/
-LDM_THD_DTR_DECL(dkey,CW_deinit);
+LDM_THD_DTR_DECL(dkey,deinit_thread);
 
 void getPoked(SamplingState s,ucontext_t *ctx){
 
@@ -37,7 +37,7 @@ void getPoked(SamplingState s,ucontext_t *ctx){
 
 }
 
-void deinit_thread(void *d){
+static void deinit_thread(void *d){
 
   sampled_thread_monitor_deinit(d);
   fprintf(stderr,"Done with all that sampling in thread %lu!\n",(unsigned long)pthread_self());
