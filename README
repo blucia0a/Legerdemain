@@ -1,24 +1,34 @@
-
 Legerdemain - Brandon Lucia - 2011 - University of Washington
 
-Legerdemain (LDM) is a debugger focused on instrumenting programs,
-replacing/wrapping functions, and monitoring/collecting information at runtime.
-The main goal of LDM, in contrast with something like GDB is that LDM aims to
-be ridiculously efficient by default, and to provide facilities for users to
-add functionality as needed.  I consider LDM most useful for getting information
-out of programs that you don't have the freedom to change.  I find it useful in
-building research program analysis tools, as the assumption for work like that
-is usually that the programs being analyzed are out of the control of the
-analyzer.  LDM can instrument functions, threads, and instructions.  The Core
-Functionality section talks about how it does that, via Plugins and Thread
-Constructor Plugins.   
+Legerdemain (LDM) is a program instrumentation framework.
+The purpose of LDM is to provide the ability to:
+
+  *replace/wrap functions
+  *monitor program events
+  *collecting information
+  *support multithreaded programs
+
+The main design goals of LDM are performance, and extensibility.  LDM is
+structured as a framework.  To use LDM, a user must write a plugin that
+replaces functions, monitors certain events, or collects information.  Which
+functions, events, and information are at the discretion of the user.  
+
+The main use case of LDM is to create plugins that implement program analysis
+tools.  LDM is a good platform for writing program analysis tools because it
+can collect information about programs that cannot be changed, and therefore
+can not be instrumented directly by hand.
+
+The Core Functionality section talks about how it does that, via Plugins and
+Thread Constructor Plugins.   
+
 
 Core Functionality:
 -------------------
-LDM is centered around the idea of plugins.  LDM
-plugins can do lots of different things.  Plugins can wrap existing library
-functions.  Plugins can provide additional debugging facilities (like thread_constructor).  Plugins can provide application level profiling and debugging
-support (like clientlibs/ConcurrentWatcher).
+LDM is centered around the idea of plugins.  LDM plugins can do lots of
+different things.  Plugins can wrap existing library functions.  Plugins can
+provide additional debugging facilities (like thread_constructor).  Plugins can
+provide application level profiling and debugging support (like
+clientlibs/ConcurrentWatcher).
 
 ldm.sh <your program> runs your program under a default configuration.  It will
 load plugins, and provide a debug shell, should you receive any fatal signals.
@@ -84,20 +94,20 @@ To cause LDM to load MallocWatcher.so, run
 
 LDM_CLIENTLIBS=imalloc.so ldm.sh <any program>
 
-Generally, the LDM_CLIENTLIBS variable loads LDM plugins at runtime, within
+Generally, the LDM_PLUGINS variable loads LDM plugins at runtime, within
 ldm.sh.  Note that plugins are *not* thread safe, unless you make them thread
 safe.  For example, if this plugin is run on a multithreaded program,
 malloccount would need to be protected with a lock.  Also note that you must
 specify that init and deinit are to be run when the library is loaded by
-specifying the constructor and destructor attributes.  This is going to be cleaned up in a future version of LDM.
+specifying the constructor and destructor attributes.  This is going to be
+cleaned up in a future version of LDM.
 
 
-
-Thread Constructors
-...................
-In addition to plugins, "thread constructor" plugins can be built.  A thread
-constructor must define a function called "init_thread".  This function is
-called by every thread the program spawns before entering its start_routine.  
+Thread-Aware Plugins (TAPs)
+..........................
+In addition to plugins, TAPs can be built.  A TAP must define a function called
+"init_thread".  This function is called by every thread the program spawns
+before entering its start_routine.  
 
 The function has the following signature:
 
@@ -105,22 +115,59 @@ void init_thread(void *arg,void *(*start_routine)(void *));
 
 The "arg" argument is the void * argument passed to pthread_create when the
 program created the thread.  The "start_routine" argument is the void *(*)(void
-*) argument passed to pthread_create.  The routine is exposed to thread
-constructors in case a program has a need to selectively apply instrumentation
-to only threads executing a certain function.
+*) argument passed to pthread_create.  The routine is exposed to the TAP so a
+program may selectively apply instrumentation to only threads executing a
+certain function.
 
-Thread constructors are conceptually a "subclass" of plugins.  They can still
-do all the things that plugins can do (use LDM_ORIG_DECL, etc), but they also
-allow you to expose the init_thread function.  Thread Constructors are
-specified via the LDM_TCTR (NOT LDM_CLIENTLIBS) environment variable, and are
-loaded by ldm's thread_constructor module, when it is loaded by LDM.  A better
-tutorial example of a thread constructor is forthcoming.
+A TAP may also specify a thread destructor routine.  There are several things
+that are required to ensure thread destructors are correctly handled.  First,
+the thread destructor must be declared, and associated with a special
+destructor identifier using LDM_THD_DTR_DECL(id,func).  Second, in the plugin
+initializer (the function declared with LDM_PLUGIN_INIT), you must call
+LDM_REGISTER_THD_DTR(id,func).  Finally, in the init_thread function, each
+thread must call LDM_INSTALL_THD_DTR(id), to enable the destructor.
 
-An example of a thread_constructor plugin is in clientlibs/ConcurrentWatcher.
-ConcurrentWatcher is documented in its own README file.  It is the best
-illustration of a thread_constructor.  To build a new thread_constructor
-plugin, it is probably best to work from this example.  To build
-ConcurrentWatcher, just run make in its directory.
+TAPs are conceptually a "subclass" of regular plugins.  They can still do all
+the things that plugins can do (use LDM_ORIG_DECL, etc), but they also allow
+you to expose the init_thread function.  TAPs are specified as a colon
+separated list via the LDM_TAPS (not LDM_PLUGINS, like regular plugins)
+environment variable, and are loaded by ldm's thread_constructor module, when
+it is loaded by LDM.  
+
+An example of a TAP is in clientlibs/NullThreadWatcher.  It illustrates a
+thread_init function, and the establishment of a thread destructor.
+
+
+Sampled TAPs (sTAPs)
+....................
+LDM provides support to temporally sample events in your program.  There is a
+simple tutorial example illustrating how to use this feature in
+clientlibs/NullSampledWatcher.  There are several steps:
+
+1)First write a TAP (see previous section).  
+
+2)Call sampled_thread_monitor_init() to initialize the sampling subsystem when
+  you intialize your plugin (in your LDM_PLUGIN_INIT function).  
+
+3)Register threads with the sampling system as they are created.  Do this using
+  sampled_thread_monitor_thread_init(), which should be called from your plugin's
+  thread initialization function (thread_init()).  
+
+4)Create a destructor in your TAP (see previous section).  In your plugin's
+  thread destructor, you need to call sampled_thread_monitor_thread_deinit().
+  This is important, as if you do not, your program will crash.
+
+5)In order to do anything in your sTAP, you need to register a
+  function that gets called when the sampling subsystem 'poke's your threads.  To
+  do so, you need to write a function that gets passed as the second argument to 
+  sampled_thread_monitor_init(). The returns void, and is passed two
+  arguments by the sampling subsystem when it is called: a SamplingState
+  argument, that says whether sampling is being turned on (SAMPLE_ON) or off
+  (SAMPLE_OFF); and a ucontext_t * argument, which is the architectural context
+  of the thread at the point just before it was poked. 
+
+Refer to clientlibs/NullSampledWatcher/NullSampledWatcher.c for an illustrative 
+example of a sTAP.
 
 
 DEBUGGING SUPPORT:
@@ -145,10 +192,17 @@ useful in 3 ways right now.
 3)using the -p option dumps all the dwarf debug information in the binary
 
 
+APPENDIX A: Design Notes
+------------------------
+Driven by performance, LDM does not use the dynamic compilation strategy used
+by Dynamo/DynamoRIO/Pin. LDM is different in that there is no fixed overhead to
+running a program with LDM, like there is with Pin (due to dynamic compilation,
+code caching, etc). Instead, LDM runs programs with zero overhead, unless
+instructed otherwise by a program analysis plugin.  The cost of this design
+decision is that many fine-grained events that are accessible to Pin are
+fundamentally uninstrumentable by LDM.
 
-----------------------------------------------------------------------------
-Add support for user defined watchpoints, via drprobe (github.com/blucia0a/drprobe).
 
-Add support for generic instrumentation (non function call based)
-
-Add support for plugins to stream tasks to LDM data aggregation thread
+APPENDIX B: TODO
+----------------
+Add integrated support for user defined watchpoints, via drprobe (github.com/blucia0a/drprobe).
