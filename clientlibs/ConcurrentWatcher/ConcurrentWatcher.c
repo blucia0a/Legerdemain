@@ -15,114 +15,37 @@
 
 #include "drprobe.h"
 #include "legerdemain.h"
+#include "sampled_thread_monitor.h"
 
 #define MAX_NUM_THREADS 512
-int (*myPthreadCreate)(pthread_t *thread,
-              const pthread_attr_t *attr,
-              void *(*start_routine)(void*), void *arg);
-int (*myPthreadLock)(pthread_mutex_t *mutex);
-int (*myPthreadUnlock)(pthread_mutex_t *mutex);
 
-pthread_t monitorThread;
+/*Declare that we'll be using a thread destructor*/
+LDM_THD_DTR_DECL(dkey,CW_deinit);
 
-pthread_mutex_t threadListLock;
-pthread_t threadList[MAX_NUM_THREADS];
-
-LDM_THD_DTR_DECL(dkey,deinitthread);
-
+/*Data related to communication monitoring*/
+/*Global version of src and sink addresses*/
 void *gsrcAddr;
 void *gsinkAddr;
 
-GHashTable *lastWriter;
-
+/*Thread-local version of src and sink addresses*/
 __thread void *srcAddr;
 __thread void *sinkAddr;
+
+/*Hash table mapping a memory location to the pthread_t that last wrote it */
+pthread_mutex_t lastWriterLock;
+GHashTable *lastWriter;
+
+/*Per-Thread counters of src and sink freq, 
+ *and the count of communicating sink execs.
+*/
 __thread unsigned long srcFreq;
 __thread unsigned long sinkFreq;
 __thread unsigned long sinkComm;
-__thread unsigned long threadId;
 
-pthread_t lastSrc;
-void *lastD1;
-void *lastD2;
-pthread_mutex_t lastSrcLock;
 
-typedef enum _CW_WatchState{
-  WATCHING = 0,
-  WAITING
-} CW_WatchState;
-__thread CW_WatchState watchState; 
+void getPoked(SamplingState s){
 
-static int active;
-void *monitor(void *p){
-
-  /*The sampling monitor thread*/
-
-  ldmmsg(stderr,"[ConcurrentWatcher] Monitor is %lu\n",(unsigned long)pthread_self());
-
-  /*Get the sampling rate*/
-  char *pp = getenv("LDM_RATE");
-  unsigned long r;
-  if(pp != NULL){
-    sscanf(pp,"%lu",&r);
-  }else{
-    r = 10000;
-  }
-
-  /*Get the sampling period -- TODO: cut this?*/
-  pp = getenv("LDM_PERIOD");
-  unsigned long per;
-  if(pp != NULL){
-    sscanf(pp,"%lu",&per);
-  }else{
-    per = r;
-  }
-   
-  /*If the rate is NULL, then we will never poke threads*/ 
-  if( !r ){
-    return;
-  }
- 
-  /*Main monitor loop -- sleep, then poke each thread*/
-  while(1){
-
-    //Sleep for the gov't mandated interval 
-    if(active){
-      usleep(rand() % r);
-    }else{
-      usleep(rand() % per);
-    }
-
-    myPthreadLock(&threadListLock);
-    int i;
-    for(i = 0; i < MAX_NUM_THREADS; i++){
-      if( threadList[i] != (pthread_t)0 ){ 
-
-        //Poke all live threads
-        pthread_kill(threadList[i],SIGUSR1);
-      }
-    }
- 
-    /*Update the global sampling state, so new
- *    threads know what state to be in when they start
- *    */
-    active = !active;
-
-    myPthreadUnlock(&threadListLock);
-
-  }
- 
-}
-
-void handlePoke(int signum, siginfo_t *sinfo, void *ctx){
-
- /* The purpose of a Poke is to toggle a thread from 
- *  monitoring to not-monitoring.  That switch-over
- *  happens in here.  There could be user code executed
- *  at each poke, but in this case there is not
- *  */
-  
-  if( watchState == WAITING ){
+  if( s == SAMPLE_ON){
 
     if( srcAddr != NULL ){
 
@@ -135,23 +58,27 @@ void handlePoke(int signum, siginfo_t *sinfo, void *ctx){
       drp_watch_inst((unsigned long)sinkAddr,1);
 
     }
-    watchState = WATCHING;
 
   }else{
-
+    
     if( srcAddr != NULL ){
+
       drp_unwatch(0); 
+
     }
 
     if( sinkAddr != NULL ){
+
       drp_unwatch(1); 
+
     }
-    watchState = WAITING;
 
   }
- 
+
 }
 
+
+/*This function gets called whenever a watchpoint fires*/
 void handleTrap(int signum, siginfo_t *sinfo, void *ctx){
 
   /*User trap handler.*/
@@ -171,9 +98,9 @@ void handleTrap(int signum, siginfo_t *sinfo, void *ctx){
  
     /*The source watchpoint fired.*/
     /*Update the last writer to be this thread*/
-    myPthreadLock(&lastSrcLock);
-    g_hash_table_insert(lastWriter, (gpointer)opAddrs[0], (gpointer)threadId);
-    myPthreadUnlock(&lastSrcLock);
+    pthread_mutex_lock(&lastWriterLock);
+    g_hash_table_insert(lastWriter, (gpointer)opAddrs[0], (gpointer)pthread_self());
+    pthread_mutex_unlock(&lastWriterLock);
 
     srcFreq++;
 
@@ -183,14 +110,14 @@ void handleTrap(int signum, siginfo_t *sinfo, void *ctx){
     /*The sink watchpoint fired.*/
     /*Get the last writer*/
     unsigned long last;
-    myPthreadLock(&lastSrcLock);
+    pthread_mutex_lock(&lastWriterLock);
     last = (unsigned long)g_hash_table_lookup(lastWriter,(gconstpointer)opAddrs[1]);
-    myPthreadUnlock(&lastSrcLock);
+    pthread_mutex_unlock(&lastWriterLock);
 
     /*It was a communication to the sink from the source
       if the last writer was a different thread
     */
-    if( last && (threadId != last) ){
+    if( last && !pthread_equal(pthread_self(),(pthread_t)last) ){
       sinkComm++;
     }
     sinkFreq++;
@@ -209,42 +136,18 @@ void handleTrap(int signum, siginfo_t *sinfo, void *ctx){
 
 void deinit_thread(void *d){
 
-  /*Sampling monitor thread destructor stuff*/
-
-  /*A thread is ending*/
-  myPthreadLock(&threadListLock);
-
+  sampled_thread_monitor_deinit(d);
+  
   /*Unwatch your watchpoints*/
   drp_unwatch(0);
   drp_unwatch(1);
-
-  /*Remove yourself from the set of 
-   *threads that will be poked
-   */
-  int i;
-  for(i = 0; i < MAX_NUM_THREADS; i++){
-    if( pthread_equal(pthread_self(),threadList[i]) ){ 
-
-      threadList[i] = (pthread_t)0;
-
-    }
-  }
-  myPthreadUnlock(&threadListLock);
-
-
-  /*User thread destructor stuff*/
-
+  
   /*Produce thread output*/
-  fprintf(stderr,"%lu %lu %lu %lu (%f%%)\n",threadId,srcFreq,sinkFreq,sinkComm,100*((float)sinkComm/(float)sinkFreq));
+  fprintf(stderr,"%lu %lu %lu %lu (%f%%)\n",pthread_self(),srcFreq,sinkFreq,sinkComm,100*((float)sinkComm/(float)sinkFreq));
 
 }
 
-void init_thread(void *targ, void*(*thdrtn)(void*)){
-
-  /*Don't do initialization stuff for the monitor thread*/
-  if(thdrtn == monitor){
-    return; 
-  }
+void init_thread(void *targ, void *(*thdrtn)(void*)){
 
   /*Set up the user initialization stuff*/ 
   
@@ -252,9 +155,9 @@ void init_thread(void *targ, void*(*thdrtn)(void*)){
   LDM_INSTALL_THD_DTR(dkey);
 
   /*Watchpoint registration*/
-  fprintf(stderr,"[WATCHER] Setting instruction watchpoints on %p and %p\n",srcAddr,sinkAddr);
   srcAddr = gsrcAddr;
   sinkAddr = gsinkAddr;
+  fprintf(stderr,"[WATCHER] Setting instruction watchpoints on %p and %p\n",srcAddr,sinkAddr);
   if( srcAddr != NULL ){
     drp_watch_inst((unsigned long)srcAddr,0);
   }
@@ -263,75 +166,24 @@ void init_thread(void *targ, void*(*thdrtn)(void*)){
     drp_watch_inst((unsigned long)sinkAddr,1);
   }
  
-  /*Set up the sampling monitor initialization stuff*/ 
+  sampled_thread_monitor_thread_init(targ,thdrtn);
 
-  /*Register the poke handler*/
-  struct sigaction zact;
-  zact.sa_sigaction = handlePoke;
-  zact.sa_flags = SA_SIGINFO;
-  sigaction(SIGUSR1,&zact,NULL);
-
-  /*Add this thread to the pokable list*/
-  myPthreadLock(&threadListLock);
-  int i;
-  for(i = 0; i < MAX_NUM_THREADS; i++){
-    if( threadList[i] == (pthread_t)0 ){ 
-      //Poke all live threads
-      threadList[i] = pthread_self();
-      threadId = i;
-      break;
-    }
-  }
-
-  /*Sync this thread to the current sampling state*/
-  if( active ){
-    watchState = WATCHING;
-  }else{
-    watchState = WAITING;
-  }
-  myPthreadUnlock(&threadListLock);
-
-  
 }
-
 
 static void LDM_PLUGIN_INIT init(){
 
-  setupX86Decoder(); 
-  lastWriter = g_hash_table_new(g_direct_hash,g_direct_equal);
-
-  void *h = NULL;
-  h = dlopen("libpthread.so.0",RTLD_LAZY);
-  if(h == NULL){
-    fprintf(stderr,"couldn't open pthreads %s\n",dlerror());
-  }else{
-    myPthreadCreate = dlsym(h,"pthread_create");
-    myPthreadLock = dlsym(h,"pthread_mutex_lock");
-    myPthreadUnlock= dlsym(h,"pthread_mutex_unlock");
-    if(myPthreadCreate == NULL){
-      fprintf(stderr,"Couldn't get pthread_create\n");
-    }
-    if(myPthreadLock == NULL){
-      fprintf(stderr,"Couldn't get pthread_create\n");
-    }
-    if(myPthreadUnlock == NULL){
-      fprintf(stderr,"Couldn't get pthread_create\n");
-    }
-  }
-
-  drp_init();
-   
-  int i; 
-  for(i = 0; i < MAX_NUM_THREADS; i++){
-    threadList[i] = (pthread_t)0;
-  }
-
-  pthread_mutex_init(&threadListLock,NULL);
-  pthread_mutex_init(&lastSrcLock,NULL);
-
+  /*Register the thread destructor routine*/
   LDM_REGISTER_THD_DTR(dkey,deinit_thread);
+ 
+  /*set up the X86 Decoding support code*/ 
+  setupX86Decoder(); 
 
-  myPthreadCreate(&monitorThread,NULL,monitor,NULL);
+  /*Create the map from address to last-writer-thread*/
+  lastWriter = g_hash_table_new(g_direct_hash,g_direct_equal);
+  pthread_mutex_init(&lastWriterLock,NULL);
+
+  /*Set up watchpoint stuff, and get addresses to watch from the environment*/
+  drp_init();
 
   char *srAd = getenv("LDM_SRC");
   char *siAd = getenv("LDM_SINK");
@@ -344,14 +196,17 @@ static void LDM_PLUGIN_INIT init(){
     sscanf(siAd,"%lx",&gsinkAddr);
   }
 
+  /*Register a callback to run when a watchpoint gets whacked*/
   struct sigaction sact;
   sact.sa_sigaction = handleTrap;
   sact.sa_flags = SA_SIGINFO;
   sigaction(SIGTRAP,&sact,NULL);
 
-  init_thread(0x0,(void*(*)(void*))0x1);
+  void *d = NULL;
+  sampled_thread_monitor_init(d,getPoked);
+  
+  
+  /*Init this thread, so it dumps its data when it finishes*/
+  //init_thread(0x0,(void*(*)(void*))0x1);
 
 }
-
-
-

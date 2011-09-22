@@ -38,8 +38,8 @@ libdwarfclient: dwarfclient.c dwarfclient.h $(LDM_LIBDIR)/libstack.a
 ###################################################
 #Rule to build the main LDM shared library
 ###################################################
-ldm: legerdemain.c legerdemain.h
-	gcc -fPIC legerdemain.c -o $(LDM_LIBDIR)/libldm.so -fPIC -shared -g -O3 -L$(DWARFDIR) -ldwarf -lbfd -lelf -ldl -lreadline $(LDM_LIBDIR)/libaddr2line.a $(LDM_LIBDIR)/libapplier.a $(LDM_LIBDIR)/libdwarfclient.a $(LDM_LIBDIR)/libstack.a
+ldm: legerdemain.c legerdemain.h sampled_thread_monitor.c sampled_thread_monitor.h
+	gcc sampled_thread_monitor.c legerdemain.c -o $(LDM_LIBDIR)/libldm.so -fPIC -shared -g -O3 -L$(DWARFDIR) -ldwarf -lbfd -lelf -ldl -lreadline $(LDM_LIBDIR)/libaddr2line.a $(LDM_LIBDIR)/libapplier.a $(LDM_LIBDIR)/libdwarfclient.a $(LDM_LIBDIR)/libstack.a
 
 
 
