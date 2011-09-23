@@ -54,13 +54,16 @@ static void *monitor(void *p){
   }
  
   /*Main monitor loop -- sleep, then poke each thread*/
+  active = 0;
   while(1){
 
     //Sleep for the gov't mandated interval 
-    if(active){
-      usleep(rand() % r);
+    if(!active){
+      /*When not sampling, sleep for the "rate"*/
+      usleep(r);
     }else{
-      usleep(rand() % per);
+      /*When sampling, sleep for the "period"*/
+      usleep(per);
     }
 
     myPthreadLock(&threadListLock);
