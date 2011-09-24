@@ -1,37 +1,43 @@
 Legerdemain - Brandon Lucia - 2011 - University of Washington
 
-Legerdemain (LDM) is a program instrumentation framework.
-The purpose of LDM is to provide the ability to:
+Legerdemain (LDM) is a program instrumentation framework.  The purpose of LDM
+is to provide the ability to instrument C and C++ programs with flexibility,
+simplicity, and low overhead.  
+
+Here is a list of things that can be done easily using LDM:
 
   *replace/wrap functions
   *monitor program events
   *collecting information
   *support multithreaded programs
 
-The main design goals of LDM are performance, and extensibility.  LDM is
-structured as a framework.  To use LDM, a user must write a plugin that
-replaces functions, monitors certain events, or collects information.  Which
-functions, events, and information are at the discretion of the user.  
+The main design goals of LDM are simplicity, extensibility, and performance.
+LDM is a framework for building instrumentation tools.  A user can write a
+plugin for LDM that replaces functions, monitors certain events, or collects
+information.  Which functions, events, and information are collected is up to
+the discretion of the user.  
 
 The main use case of LDM is to create plugins that implement program analysis
 tools.  LDM is a good platform for writing program analysis tools because it
-can collect information about programs that cannot be changed, and therefore
-can not be instrumented directly by hand.
+can collect information without requiring kernel-level access or changes to the program being instrumented.  
 
-The Core Functionality section talks about how it does that, via Plugins and
-Thread Constructor Plugins.   
+The Core Functionality section talks about how LDM works, describing Plugins
+and Thread Constructor Plugins.   
 
 
 Core Functionality:
 -------------------
-LDM is centered around the idea of plugins.  LDM plugins can do lots of
-different things.  Plugins can wrap existing library functions.  Plugins can
-provide additional debugging facilities (like thread_constructor).  Plugins can
-provide application level profiling and debugging support (like
-clientlibs/ConcurrentWatcher).
+LDM is centered around the idea of plugins. Plugins are shared libraries that
+are built to be loaded at runtime by LDM.  A loaded plugin can implement custom
+instrumentation and analysis.  
 
-ldm.sh <your program> runs your program under a default configuration.  It will
-load plugins, and provide a debug shell, should you receive any fatal signals.
+
+LDM can be run by running "LDM_PLUGINS=<ldm plugin list> LDM_TAPS=<ldm taps
+list> ldm.sh <your program>".  This command runs your program under a default
+configuration.  It will load plugins listed in LDM_PLUGINS, TAPs listed in
+LDM_TAPS, and optionally provide a debug shell, should you receive any fatal
+signals.
+
 
 Plugins
 .......
@@ -206,3 +212,9 @@ fundamentally uninstrumentable by LDM.
 APPENDIX B: TODO
 ----------------
 Add integrated support for user defined watchpoints, via drprobe (github.com/blucia0a/drprobe).
+
+Fix plugin framework to be all TAPS. -- THis is a simple fix that pushes plugin loading directly into thread_constructor.c.  thread_constructor.c should be renamed.
+
+Implement plugin dtrs using atexit in the ctr, rather than relying on the dynamic loader to run the destructor correctly...
+
+
