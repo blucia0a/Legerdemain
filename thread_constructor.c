@@ -18,7 +18,6 @@ typedef struct _threadInitData{
 
 void *threadStartFunc(void *arg){
 
-  ldmmsg(stderr,"[THREAD CTR] Initializing Thread %lu\n",(unsigned long)pthread_self());
   threadInitData *tid = (threadInitData *)arg;   
 
   int i;
@@ -46,23 +45,34 @@ int pthread_create( pthread_t *thread, const pthread_attr_t *attr, void *(*start
 void loadConstructor(char *ctrLibName, void *data){
 
   if(LDM_numCtrs == LDM_MAX_TCTRS){
-    ldmmsg(stderr,"[THREAD CTR] Warning: cannot register thread constructor \"%s\" because there are already %d registered\n",ctrLibName,LDM_MAX_TCTRS);
+    ldmmsg(stderr,"[TAP Manager] Warning: cannot register thread constructor \"%s\" because there are already %d registered\n",ctrLibName,LDM_MAX_TCTRS);
   }
 
   void *pluginObject = dlopen(ctrLibName, RTLD_LOCAL | RTLD_LAZY);
   if(pluginObject == NULL){
-    ldmmsg(stderr,"[THREAD CTR] Couldn't dlopen %s\n",ctrLibName);
-    ldmmsg(stderr,"[THREAD CTR] %s\n",dlerror());
+    ldmmsg(stderr,"[TAP Manager] Couldn't dlopen %s\n",ctrLibName);
+    ldmmsg(stderr,"[TAP Manager] %s\n",dlerror());
   }
-  void *fptr = dlsym(pluginObject, "init_thread");
+
+  void *fptr = dlsym(pluginObject, LDM_STR(LDM_PLUGIN_THD_INIT));
 
   if(fptr != NULL){
 
     LDM_thd_ctr[LDM_numCtrs++] = fptr;
 
+  }
+
+  /*it's just a standard plugin.  Load init manually, init_thread 
+   *wasn't found, so this loads the library*/
+  fptr = dlsym(pluginObject, LDM_STR(LDM_PLUGIN_INIT));
+
+  if(fptr != NULL){
+
+    ((void (*)())fptr)();
+
   }else{
 
-    ldmmsg(stderr,"[THREAD CTR] Warning: can't load thread constructor init_thread() from %s\n",ctrLibName);
+    ldmmsg(stderr,"[TAP Manager] Warning: can't load %s or %s from %s [%s]\n",LDM_STR(LDM_PLUGIN_THD_INIT),LDM_STR(LDM_PLUGIN_INIT),ctrLibName,dlerror());
 
   }
 
@@ -72,11 +82,11 @@ static void __attribute__ ((constructor))init();
 static void __attribute__ ((destructor)) deinit();
 static void init(){
 
-  ldmmsg(stderr,"[THREAD CTR] Initializing...\n"); 
+  ldmmsg(stderr,"[TAP Manager] Initializing...\n"); 
   LDM_REG(pthread_create);
   char *p = getenv("LDM_TAPS"); 
   if( p != NULL ){
-    ldmmsg(stderr,"[THREAD CTR] Thread Constructor: %s\n",p);
+    ldmmsg(stderr,"[TAP Manager] Loading TAP: %s\n",p);
     applyToTokens(p,":,",loadConstructor,NULL);
   }
  

@@ -55,7 +55,6 @@ thread_constructor: $(LDM_LIBDIR)/libapplier.a
 null_thd_constructor: 
 	gcc null_thd_constructor.c -o $(LDM_LIBDIR)/null_thd_constructor.so -fPIC -shared -g -O3
 
-
 ###################################################
 #Rule to build the standalone dwarf dumping utility
 ###################################################

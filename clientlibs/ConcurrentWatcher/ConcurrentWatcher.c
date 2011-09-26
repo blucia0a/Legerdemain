@@ -147,7 +147,7 @@ static void deinit_thread(void *d){
 
 }
 
-void init_thread(void *targ, void *(*thdrtn)(void*)){
+void LDM_PLUGIN_THD_INIT(void *targ, void *(*thdrtn)(void*)){
 
   /*Set up the user initialization stuff*/ 
   
@@ -170,7 +170,7 @@ void init_thread(void *targ, void *(*thdrtn)(void*)){
 
 }
 
-static void LDM_PLUGIN_INIT init(){
+void LDM_PLUGIN_INIT(){
 
   /*Register the thread destructor routine*/
   LDM_REGISTER_THD_DTR(dkey,deinit_thread);
@@ -204,9 +204,5 @@ static void LDM_PLUGIN_INIT init(){
 
   void *d = NULL;
   sampled_thread_monitor_init(d,getPoked);
-  
-  
-  /*Init this thread, so it dumps its data when it finishes*/
-  //init_thread(0x0,(void*(*)(void*))0x1);
 
 }

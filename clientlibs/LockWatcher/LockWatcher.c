@@ -16,18 +16,19 @@ int pthread_mutex_unlock(pthread_mutex_t *lock){
 
 }
 
-static void __attribute__ ((constructor)) init();
-static void init(){
+static void deinit(){
+
+  ldmmsg(stderr,"[LockWatcher] Deinitializing LockWatcher Plugin!\n");
+  
+
+}
+
+void LDM_PLUGIN_INIT(){
 
   ldmmsg(stderr,"[LockWatcher] Initializing LockWatcher Plugin!\n");
   LDM_REG(pthread_mutex_lock);
   LDM_REG(pthread_mutex_unlock);
+  LDM_PLUGIN_DEINIT(deinit);
 
 }
 
-static void __attribute__ ((destructor)) deinit();
-static void deinit(){
-
-  ldmmsg(stderr,"[LockWatcher] Deinitializing LockWatcher Plugin!\n");
-
-}

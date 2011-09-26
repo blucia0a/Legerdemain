@@ -44,7 +44,7 @@ static void deinit_thread(void *d){
 
 }
 
-void init_thread(void *targ, void *(*thdrtn)(void*)){
+void LDM_PLUGIN_THD_INIT(void *targ, void *(*thdrtn)(void*)){
 
   /*Install the thread destructor function associated with dkey*/
   LDM_INSTALL_THD_DTR(dkey);
@@ -54,7 +54,7 @@ void init_thread(void *targ, void *(*thdrtn)(void*)){
 
 }
 
-static void LDM_PLUGIN_INIT init(){
+void LDM_PLUGIN_INIT(){
 
   /*Register the thread destructor routine*/
   LDM_REGISTER_THD_DTR(dkey,deinit_thread);

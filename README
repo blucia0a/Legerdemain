@@ -27,25 +27,23 @@ and Thread Constructor Plugins.
 
 Core Functionality:
 -------------------
-LDM is centered around the idea of plugins. Plugins are shared libraries that
-are built to be loaded at runtime by LDM.  A loaded plugin can implement custom
-instrumentation and analysis.  
+LDM is centered around the idea of Transparent Analysis Plugins or TAPs. TAPs
+are shared libraries that are built to be loaded at runtime by LDM.  A TAP can
+implement custom instrumentation and analysis.  
+
+LDM can be run by running "LDM_TAPS=<ldm taps list> ldm.sh <your program>".
+This command runs your program under a default configuration.  It will load
+TAPs listed in LDM_TAPS.  Optionally LDM will provide a debug shell on crashes,
+if run with LDM_DEBUG=1.
 
 
-LDM can be run by running "LDM_PLUGINS=<ldm plugin list> LDM_TAPS=<ldm taps
-list> ldm.sh <your program>".  This command runs your program under a default
-configuration.  It will load plugins listed in LDM_PLUGINS, TAPs listed in
-LDM_TAPS, and optionally provide a debug shell, should you receive any fatal
-signals.
-
-
-Plugins
-.......
-Plugins extend LDM's core functionality.  The simplest kind of plugin is one
-that replaces all calls to one function with a function in the plugin.  To do
-so, you can use the LDM_REG, LDM_ORIG, and LDM_ORIG_DECL macros.  These mostly
-just wrap LD_PRELOAD/dlopen/dlsym stuff, but in my opinion, make them much less
-unweildy.  Concretely, to wrap a function (malloc, say):
+Basic Plugins
+.............
+TAPs extend LDM's core functionality.  The simplest kind of plugin is one that
+replaces all calls to one function with a function in the plugin.  To do so,
+you can use the LDM_REG, LDM_ORIG, and LDM_ORIG_DECL macros.  These are just
+wrappers to make this use of LD_PRELOAD/dlopen/dlsym easier and more concise.
+To wrap a function (malloc, say):
 
 
 Pseudo-Code Example 1: Instrumenting calls to malloc.  MallocWatcher.c
@@ -55,77 +53,80 @@ Pseudo-Code Example 1: Instrumenting calls to malloc.  MallocWatcher.c
 
 #include "legerdemain.h"
 
+static int inited;
 static int malloccount;
 LDM_ORIG_DECL(void *,malloc,size_t);
 void *malloc(size_t sz){
   malloccount++;
-  if( LDM_ORIG(malloc) == NULL ){
-    fprintf(stderr,"[MALLOCWATCHER] Forced To register in replacement malloc\n");
+  if( !inited ){
     LDM_REG(malloc);
   }
   return LDM_ORIG(malloc)(sz);
 }
 
-static void __attribute__ ((constructor)) init();
-static void init(){
-  LDM_REG(malloc);
-  ldmmsg(stderr,"[MALLOCWATCHER] Loading fancy malloc plugin\n");
-}
-
-static void __attribute__ ((constructor)) deinit();
 static void deinit(){
   ldmmsg(stderr,"[MALLOCWATCHER] Unloading fancy malloc plugin\n");
   ldmmsg(stderr,"[MALLOCWATCHER] Malloc was called %d times\n",malloccount);
 }
+
+void LDM_PLUGIN_INIT(){
+  ldmmsg(stderr,"[MALLOCWATCHER] Loading fancy malloc plugin\n");
+  LDM_REG(malloc);
+  inited = 1;
+  LDM_PLUGIN_DEINIT(deinit)
+}
+
 =========================================
 
 The plugin can be built as a .so, by running
 
 gcc -fPIC -shared -o MallocWatcher.so MallocWatcher.c -ldl
 
-That will produce MallocWatcher.so.    This plugin uses LDM_ORIG_DECL to
-declare that the function malloc is being replaced.  Then, in the plugin's
-version of malloc(), the original version of malloc() is called using
-LDM_ORIG(malloc).  Finally, LDM_REG is called in init() to register the
-replacement with LDM.  Note that in some cases, the function you are replacing
-may be called during your plugin's initialization.  You need to be sure it
-isn't being called before LDM_REG() is called.  The NULL guard in malloc() in
-the above example illustrates this.  This will be made more convenient in a
-future version of LDM.  ldmmsg(f,s) prints the string s to the FILE *f with
+That will produce MallocWatcher.so.    
+The plugin is initialized by the special function LDM_PLUGIN_INIT.  This
+function will be called when LDM is registering the plugin.  In
+LDM_PLUGIN_INIT, LDM_PLUGIN_DEINIT(deinit) is called to register a function
+that should be called when the plugin is unloaded.
+
+This plugin uses LDM_ORIG_DECL to declare that the function malloc is being
+replaced.  Then, in the plugin's version of malloc(), the original version of
+malloc() is called using LDM_ORIG(malloc).  Finally, LDM_REG is called in
+LDM_PLUGIN_INIT() to register the replacement with LDM.  
+
+In some cases -- like this one -- the function you are replacing may be called
+during your plugin's initialization.  You need to be sure it isn't being called
+before LDM_REG() is called.  The "if( !inited )" guard in malloc() in the above
+example illustrates this.  ldmmsg(f,s) prints the string s to the FILE *f with
 [LDM] before it, so you know where your messages are originating, and they
-don't get mixed up with program output.  All this stuff is defined in
-legerdemain.h.
+don't get mixed up with program output.  
 
 To cause LDM to load MallocWatcher.so, run
 
-LDM_CLIENTLIBS=imalloc.so ldm.sh <any program>
+LDM_TAPS=MallocWatcher.so ldm.sh <any program>
 
-Generally, the LDM_PLUGINS variable loads LDM plugins at runtime, within
+Generally, the LDM_TAPS variable loads LDM plugins at runtime, within
 ldm.sh.  Note that plugins are *not* thread safe, unless you make them thread
 safe.  For example, if this plugin is run on a multithreaded program,
-malloccount would need to be protected with a lock.  Also note that you must
-specify that init and deinit are to be run when the library is loaded by
-specifying the constructor and destructor attributes.  This is going to be
-cleaned up in a future version of LDM.
+malloccount would need to be protected with a lock. 
 
 
-Thread-Aware Plugins (TAPs)
-..........................
-In addition to plugins, TAPs can be built.  A TAP must define a function called
-"init_thread".  This function is called by every thread the program spawns
-before entering its start_routine.  
+Thread-Aware Plugins
+....................
+A TAP may also define a thread constructor and destructor.  
 
-The function has the following signature:
+A thread constructor is called by every thread just before entering its
+start_routine.  Thread constructors are declared like this:
 
-void init_thread(void *arg,void *(*start_routine)(void *));
+void LDM_PLUGIN_THD_INIT(void *arg,void *(*start_routine)(void *));
 
 The "arg" argument is the void * argument passed to pthread_create when the
 program created the thread.  The "start_routine" argument is the void *(*)(void
-*) argument passed to pthread_create.  The routine is exposed to the TAP so a
-program may selectively apply instrumentation to only threads executing a
-certain function.
+*) argument passed to pthread_create.  The start_routine is exposed to the TAP
+so a program may selectively apply instrumentation to only threads executing a
+certain function.  Many thread constructors can be applied to a running program
+simultaneously, but only one may be specified per TAP.
 
-A TAP may also specify a thread destructor routine.  There are several things
+A TAP may also specify thread destructor routines.  There are several things
 that are required to ensure thread destructors are correctly handled.  First,
 the thread destructor must be declared, and associated with a special
 destructor identifier using LDM_THD_DTR_DECL(id,func).  Second, in the plugin
@@ -133,15 +134,8 @@ initializer (the function declared with LDM_PLUGIN_INIT), you must call
 LDM_REGISTER_THD_DTR(id,func).  Finally, in the init_thread function, each
 thread must call LDM_INSTALL_THD_DTR(id), to enable the destructor.
 
-TAPs are conceptually a "subclass" of regular plugins.  They can still do all
-the things that plugins can do (use LDM_ORIG_DECL, etc), but they also allow
-you to expose the init_thread function.  TAPs are specified as a colon
-separated list via the LDM_TAPS (not LDM_PLUGINS, like regular plugins)
-environment variable, and are loaded by ldm's thread_constructor module, when
-it is loaded by LDM.  
-
-An example of a TAP is in clientlibs/NullThreadWatcher.  It illustrates a
-thread_init function, and the establishment of a thread destructor.
+An example of a thread-aware TAP is in clientlibs/NullThreadWatcher.  It
+illustrates a thread constructor and destructor function.
 
 
 Sampled TAPs (sTAPs)
@@ -156,17 +150,17 @@ clientlibs/NullSampledWatcher.  There are several steps:
   you intialize your plugin (in your LDM_PLUGIN_INIT function).  
 
 3)Register threads with the sampling system as they are created.  Do this using
-  sampled_thread_monitor_thread_init(), which should be called from your plugin's
-  thread initialization function (thread_init()).  
+  sampled_thread_monitor_thread_init(), which should be called from your 
+  plugin's thread initialization function.  
 
 4)Create a destructor in your TAP (see previous section).  In your plugin's
   thread destructor, you need to call sampled_thread_monitor_thread_deinit().
   This is important, as if you do not, your program will crash.
 
 5)In order to do anything in your sTAP, you need to register a
-  function that gets called when the sampling subsystem 'poke's your threads.  To
-  do so, you need to write a function that gets passed as the second argument to 
-  sampled_thread_monitor_init(). The returns void, and is passed two
+  function that gets called when the sampling subsystem 'poke's your threads.  
+  To do so, you need to write a function that gets passed as the second 
+  argument to sampled_thread_monitor_init(). The returns void, and is passed two
   arguments by the sampling subsystem when it is called: a SamplingState
   argument, that says whether sampling is being turned on (SAMPLE_ON) or off
   (SAMPLE_OFF); and a ucontext_t * argument, which is the architectural context
@@ -178,7 +172,11 @@ example of a sTAP.
 
 DEBUGGING SUPPORT:
 ------------------
-LDM will catch fatal signals and drop to a shell.  The shell has a few useful commands, to look at memory addresses, query for live variables, etc. 'help' in the shell will overview the commands.  To force the debug shell at startup, you can specify LDM_DEBUG=1 in your environment before running ldm.sh.
+LDM will catch fatal signals and drop to a shell if you specify LDM_DEBUG=1 in
+the environment.  The shell has a few useful commands, to look at memory
+addresses, query for live variables, etc. 'help' in the shell will overview the
+commands.  To force the debug shell at startup, you can specify LDM_DEBUG=1 in
+your environment before running ldm.sh.
 
 
 ELF/DWARF Support:
@@ -212,9 +210,5 @@ fundamentally uninstrumentable by LDM.
 APPENDIX B: TODO
 ----------------
 Add integrated support for user defined watchpoints, via drprobe (github.com/blucia0a/drprobe).
-
-Fix plugin framework to be all TAPS. -- THis is a simple fix that pushes plugin loading directly into thread_constructor.c.  thread_constructor.c should be renamed.
-
-Implement plugin dtrs using atexit in the ctr, rather than relying on the dynamic loader to run the destructor correctly...
 
 

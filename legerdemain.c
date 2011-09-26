@@ -527,8 +527,8 @@ void setupSignals(){
 
   memset(&sigABRTSaver, 0, sizeof(struct sigaction));
   memset(&sigSEGVSaver, 0, sizeof(struct sigaction));
-  memset(&sigTERMSaver, 0, sizeof(struct sigaction));
-  memset(&sigINTSaver, 0, sizeof(struct sigaction));
+  //memset(&sigTERMSaver, 0, sizeof(struct sigaction));
+  //memset(&sigINTSaver, 0, sizeof(struct sigaction));
       
   /*Register Signal handler for SEGV and TERM*/
   struct sigaction segv_sa;
@@ -536,9 +536,9 @@ void setupSignals(){
   sigemptyset(&segv_sa.sa_mask);
   segv_sa.sa_flags = SA_ONSTACK | SA_SIGINFO;
   sigaction(SIGSEGV,&segv_sa,&sigSEGVSaver);
-  sigaction(SIGTERM,&segv_sa,&sigTERMSaver);
+  //sigaction(SIGTERM,&segv_sa,&sigTERMSaver);
   sigaction(SIGABRT,&segv_sa,&sigABRTSaver);
-  sigaction(SIGINT,&segv_sa,&sigINTSaver);
+  //sigaction(SIGINT,&segv_sa,&sigINTSaver);
   
 }
 

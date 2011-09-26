@@ -57,8 +57,11 @@ if( getcontext(&ucontext) != -1 ){ \
 }
 
 /*Plugin constructor/destructor magic*/
-#define LDM_PLUGIN_INIT __attribute__ ((constructor))
-#define LDM_PLUGIN_DEINIT __attribute__ ((destructor))
+#define LDM_PLUGIN_INIT _LDM_PLUGIN_INIT_ 
+#define LDM_PLUGIN_THD_INIT _LDM_PLUGIN_THD_INIT_ 
+#define LDM_STR(x) LDM_XSTR(x)
+#define LDM_XSTR(x) #x
+#define LDM_PLUGIN_DEINIT(x) atexit(x) 
 
 /*Thread destructor magic*/
 #define LDM_THD_DTR_DECL(k,f) pthread_key_t k;

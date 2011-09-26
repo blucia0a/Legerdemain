@@ -6,4 +6,4 @@ LDM_OTHERS=/sampa/home/blucia/cvsandbox/Legerdemain/libs/thread_constructor.so
 LIBDWARF=/sampa/home/blucia/cvsandbox/libdwarf/libdwarf 
 DRP=/sampa/home/blucia/cvsandbox/DRProbe/drprobe
 
-LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$DRP:$LDMDIR:$LIBDWARF LD_PRELOAD=${LDM_PRELOAD}:${LDM_OTHERS}:${LDM_TAPS}:${LDM_PLUGINS}:${LDM} $@
+LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$DRP:$LDMDIR:$LIBDWARF LD_PRELOAD=${LDM_PRELOAD}:${LDM_TAPS}:${LDM_PLUGINS}:${LDM_OTHERS}:${LDM} $@
