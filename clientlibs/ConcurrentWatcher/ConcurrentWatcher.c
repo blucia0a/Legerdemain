@@ -77,7 +77,6 @@ void getPoked(SamplingState s,ucontext_t *ctx){
 
 }
 
-
 /*This function gets called whenever a watchpoint fires*/
 void handleTrap(int signum, siginfo_t *sinfo, void *ctx){
 
@@ -90,6 +89,12 @@ void handleTrap(int signum, siginfo_t *sinfo, void *ctx){
   void *opAddrs[4];/*NOTE: 4 overprovisions, but this is a bug risk*/
   memset(opAddrs,0,4*sizeof(void*));
   getOperandAddresses(ad,(ucontext_t *)ctx,opAddrs);
+/*
+  int q;
+  for( q = 0; q < 4; q++ ){
+    fprintf(stderr,"[OP ADDRS] %d:%p\n",q,opAddrs[q]);
+  }
+*/
 
   /*Which watchpoint fired?*/
   int which = drp_explain();

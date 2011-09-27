@@ -52,12 +52,12 @@ void **getOperandAddresses( void *ad, ucontext_t *ctx, void **opAddrs ){
   x86_insn_t insn;
   int size = x86_disasm(((char *)ad)+1,sizeof(ad),0,0,&insn);
 
-  /*
+ /* 
   char *c;
   for( c = ad; c < ((char*)ad) + sizeof(ad); c++ ){
     fprintf(stderr,"%02hhx ",*c);
   }
-  */
+ */ 
 
   char line[1000];
   if( size ){/*Successfully Decoded*/
