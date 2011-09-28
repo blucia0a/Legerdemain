@@ -6,12 +6,12 @@
 
 #include "glib.h"
 
-unsigned long numAllocatedBytes;
-unsigned long numFreedBytes;
-unsigned long numStdinBytes;
+long numAllocatedBytes;
+long numFreedBytes;
+long numStdinBytes;
 
-unsigned long bytesSinceLastRead;
-unsigned long lastReadBytes;
+long bytesSinceLastRead;
+long lastReadBytes;
 
 #define S_LEN 10
 float allocPerStreamHisto[S_LEN];
@@ -73,16 +73,13 @@ int read(int fd,void *buf,size_t sz){
     allocPerStreamHisto[i] = allocPerStreamHisto[i+1];
     sum += allocPerStreamHisto[i];
   }
-  if(lastReadBytes > 0){ 
-    allocPerStreamHisto[S_LEN-1] = (float)bytesSinceLastRead/(float)lastReadBytes;
-  }else{
-    allocPerStreamHisto[S_LEN-1] = 0;
-  }
+
+  allocPerStreamHisto[S_LEN-1] = (float)bytesSinceLastRead;
   sum += allocPerStreamHisto[S_LEN-1];
 
   float avg = sum/(float)S_LEN; 
-  if( avg >= 1.0 ){
-    ldmmsg(stderr,"[Scaley] Potential Scaling Problem: %f Bytes Allocated / Byte Read\n",avg);
+  if( avg > 0.0 ){
+    ldmmsg(stderr,"[Scaley] Potential Scaling Problem: %f Bytes Allocated / Stream Read\n",avg);
   }
 
   if( fd == 0 ){
@@ -98,9 +95,9 @@ int read(int fd,void *buf,size_t sz){
 static void deinit(){
 
   ldmmsg(stderr,"[Scaley] ---- Summary Statistics ----\n");
-  ldmmsg(stderr,"[Scaley] Allocated: %lu\n",numAllocatedBytes);
-  ldmmsg(stderr,"[Scaley] Freed: %lu\n",numFreedBytes);
-  ldmmsg(stderr,"[Scaley] Streamed In: %lu\n",numStdinBytes);
+  ldmmsg(stderr,"[Scaley] Allocated: %ld\n",numAllocatedBytes);
+  ldmmsg(stderr,"[Scaley] Freed: %ld\n",numFreedBytes);
+  ldmmsg(stderr,"[Scaley] Streamed In: %ld\n",numStdinBytes);
 
 }
 

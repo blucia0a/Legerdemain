@@ -1,0 +1,32 @@
+[LDM] Legerdemain - Brandon Lucia - 2011
+[LDM] Loading function wrappers via LD_PRELOAD:
+[LDM] /sampa/home/blucia/cvsandbox/Legerdemain/clientlibs/Scaley/Scaley.so [LDM] /sampa/home/blucia/cvsandbox/Legerdemain/libs/thread_constructor.so [LDM] 
+[LDM] [TAP Manager] Initializing...
+[LDM] [TAP Manager] Loading TAP: /sampa/home/blucia/cvsandbox/Legerdemain/clientlibs/Scaley/Scaley.so
+[LDM] [Scaley] Potential Scaling Problem: 24529.699219 Bytes Allocated / Stream Read
+[LDM] [Scaley] Potential Scaling Problem: 30113.099609 Bytes Allocated / Stream Read
+[LDM] [Scaley] Potential Scaling Problem: 30516.400391 Bytes Allocated / Stream Read
+Starting
+[LDM] [Scaley] Potential Scaling Problem: 31074.800781 Bytes Allocated / Stream Read
+[LDM] [Scaley] Potential Scaling Problem: 31534.599609 Bytes Allocated / Stream Read
+[LDM] [Scaley] Potential Scaling Problem: 31534.599609 Bytes Allocated / Stream Read
+[LDM] [Scaley] Potential Scaling Problem: 31534.599609 Bytes Allocated / Stream Read
+[LDM] [Scaley] Potential Scaling Problem: 31534.599609 Bytes Allocated / Stream Read
+[LDM] [Scaley] Potential Scaling Problem: 31534.599609 Bytes Allocated / Stream Read
+[LDM] [Scaley] Potential Scaling Problem: 31585.800781 Bytes Allocated / Stream Read
+[LDM] [Scaley] Potential Scaling Problem: 7056.100098 Bytes Allocated / Stream Read
+[LDM] [Scaley] Potential Scaling Problem: 1472.699951 Bytes Allocated / Stream Read
+[LDM] [Scaley] Potential Scaling Problem: 1477.400024 Bytes Allocated / Stream Read
+[LDM] [Scaley] Potential Scaling Problem: 919.000000 Bytes Allocated / Stream Read
+[LDM] [Scaley] Potential Scaling Problem: 459.200012 Bytes Allocated / Stream Read
+[LDM] [Scaley] Potential Scaling Problem: 459.200012 Bytes Allocated / Stream Read
+[LDM] [Scaley] Potential Scaling Problem: 459.200012 Bytes Allocated / Stream Read
+[LDM] [Scaley] Potential Scaling Problem: 459.200012 Bytes Allocated / Stream Read
+[LDM] [Scaley] Potential Scaling Problem: 459.200012 Bytes Allocated / Stream Read
+[LDM] [Scaley] Potential Scaling Problem: 408.000000 Bytes Allocated / Stream Read
+[LDM] [Scaley] Potential Scaling Problem: 408.000000 Bytes Allocated / Stream Read
+[LDM] [Scaley] Potential Scaling Problem: 408.000000 Bytes Allocated / Stream Read
+[LDM] [Scaley] ---- Summary Statistics ----
+[LDM] [Scaley] Allocated: 447501324
+[LDM] [Scaley] Freed: 447204324
+[LDM] [Scaley] Streamed In: 139743232
